@@ -37,9 +37,9 @@ project start and must be used as-is. This package, mazegenerator 2.1.0, is the
 one assigned to us. Its changelog entry for 2.1.0 reads "Fix the pac-man
 compatibility", indicating it was prepared for this project.
 
-Should a different package be assigned later, only our adapter module needs to
-change: the rest of the game depends on our own internal maze model, never on
-the generator's interface directly.
+Confirmed with staff: mazegenerator 2.1.0 is the final assigned package and is
+identical for all teams. No peer team's package will be assigned later.
+Confirmed on 08.09.2026.
 
 ## Integrity
 
