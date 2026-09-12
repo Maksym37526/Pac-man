@@ -246,19 +246,32 @@ pixel by pixel, which is expensive, and the maze does not change during a level.
 
 ```
 pacman/
+├── log.py    A   logging setup, shared by every package
+
+├── errors.py A   project-specific exception hierarchy, shared by every package
 ├── core/     A   entities, movement, ghost behaviour, rules, scoring, timer
 ├── maze/     A   adapter to mazegenerator, normalisation, invariant checks
-├── io/       A   config loading and validation, highscore persistence
+├── data/       A   config loading and validation, highscore persistence
 ├── render/   B   graphics facade, renderer, sprite loading
 └── ui/       B   application state machine, screens, input translation
 ```
+`log.py` and `errors.py` are leaf modules: they sit at the root of the package
+because every other package needs them, and they import nothing from the project
+themselves. A leaf module cannot take part in an import cycle by construction.
+
+The persistence package is named `data`, not `io`: `io` is a standard library
+module name, and shadowing it in the project tree causes confusion when reading
+imports, even though Python 3's absolute imports make it technically safe. The
+same reasoning applies to `log.py` rather than `logging.py`.
 
 | Rule | Reason |
 |---|---|
+| `log.py` imports nothing from the project | leaf module: everything may depend on it, it depends on nothing |
+| `errors.py` imports nothing from the project | leaf module, same reason; importing it must never create a cycle |
 | `core` imports nothing from `render` or `ui` | headless execution, REQ-022 |
 | Only `maze/` imports `mazegenerator` | REQ-058; the adapter is the only place that knows the package |
 | Only the graphics facade in `render/` imports pygame | the facade rule in `graphics-library.md` |
-| `io/` imports nothing from `core` | config and highscores are plain data |
+| `data/` imports nothing from `core` | config and highscores are plain data |
 
 ---
 
@@ -279,7 +292,38 @@ those two fakes is the first task on B's list.
 
 ---
 
-## 9. Open points
+## 9. Contract: exception hierarchy
+
+All project-specific exceptions live in `pacman/errors.py` and derive from a
+single root, so that any layer can catch "everything our code raises" with one
+`except` while still letting genuine programming errors propagate.
+
+| Exception | Raised when | Caught where |
+|---|---|---|
+| `PacmanError` | never raised directly; the common root | the boundary handler in `pac-man.py` |
+| `ConfigError` | the configuration cannot be read or parsed at all | the boundary handler |
+| `MazeError` | the generator fails or a maze invariant cannot be satisfied | the boundary handler |
+| `HighscoreError` | highscores cannot be persisted | locally, degrade and continue |
+
+### Rules
+
+1. Errors from third-party code never escape their module. The maze adapter
+   catches whatever `mazegenerator` raises and re-raises `MazeError` with a
+   readable message (see PKG-5).
+2. Exceptions are caught at the boundary — in the entry point — not scattered
+   across the codebase. The boundary handler prints the message and returns a
+   non-zero exit code. This is what guarantees REQ-034: a clear message, never
+   a traceback.
+3. Invalid configuration *values* do not raise. They are clamped and logged per
+   subject V.3. `ConfigError` is reserved for cases where there is nothing to
+   clamp: the file is missing, unreadable, or not JSON at all.
+4. `HighscoreError` is the exception to rule 2. Failing to save a score must not
+   end the game, so it is handled where it occurs: log a warning and continue
+   (REQ-064).
+
+---
+
+## 10. Open points
 
 Recorded here so they are not silently decided by whoever writes the code first.
 

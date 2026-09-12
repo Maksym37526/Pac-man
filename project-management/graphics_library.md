@@ -17,8 +17,8 @@ subset that maps onto MLX.
 
 | Field | Value |
 |---|---|
-| Library | pygame |
-| Version | 2.6.1 |
+| Library | pygame-ce |
+| Version | 2.5.8(SDL 2.32.10) |
 | MLX reference |  MiniLibX (the MLX distributed by 42) |
 | Confirmed by | Alex|
 | Confirmed on | 08.09.2026 |

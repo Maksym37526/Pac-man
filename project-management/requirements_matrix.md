@@ -26,25 +26,25 @@ are out of scope until every MUST row below is DONE.
 
 | ID | Requirement | T | Owner | Where | Verify | St |
 |---|---|---|---|---|---|---|
-| REQ-001 | Project written in Python 3.10 or later | MUST | A | — | `python3 --version` in a clean venv | TODO |
-| REQ-002 | Code adheres to the flake8 standard | MUST | A+B | — | `make lint` exits 0 | TODO |
+| REQ-001 | Project written in Python 3.10 or later | MUST | A |Python 3.14 | `python3 --version` in a clean venv | TODO |
+| REQ-002 | Code adheres to the flake8 standard | MUST | A+B | — | `make lint` exits 0 | WIP |
 | REQ-003 | Exceptions handled gracefully; program never crashes during review | MUST | A+B | — | full playthrough + all faulty configs, no traceback | TODO |
 | REQ-004 | Context managers used for files and other resources | MUST | A | — | code review: no bare `open()` without `with` | TODO |
-| REQ-005 | Type hints on parameters, return types and variables | MUST | A+B | — | `make lint` (mypy) exits 0 | TODO |
-| REQ-006 | All functions pass mypy without errors | MUST | A+B | — | `make lint` exits 0 | TODO |
+| REQ-005 | Type hints on parameters, return types and variables | MUST | A+B | — | `make lint` (mypy) exits 0 | WIP |
+| REQ-006 | All functions pass mypy without errors | MUST | A+B | — | `make lint` exits 0 | WIP |
 | REQ-007 | Docstrings in functions and classes, PEP 257 (Google or NumPy style) | MUST | A+B | — | code review of every public function | TODO |
 
 ## III.2 — Makefile
 
 | ID | Requirement | T | Owner | Where | Verify | St |
 |---|---|---|---|---|---|---|
-| REQ-008 | Makefile present in the project | MUST | A | `Makefile` | file exists at repo root | TODO |
-| REQ-009 | Rule `install` — installs dependencies | MUST | A | `Makefile` | `make install` in a fresh venv | TODO |
-| REQ-010 | Rule `run` — executes the main script | MUST | A | `Makefile` | `make run` launches the game | TODO |
-| REQ-011 | Rule `debug` — runs the main script under a debugger (pdb) | MUST | A | `Makefile` | `make debug` drops into pdb | TODO |
-| REQ-012 | Rule `clean` — removes `__pycache__`, `.mypy_cache` and similar | MUST | A | `Makefile` | `make clean` then `find . -name __pycache__` is empty | TODO |
-| REQ-013 | Rule `lint` — `flake8 .` and `mypy .` with the exact flags from the subject | MUST | A | `Makefile` | flags match the subject verbatim | TODO |
-| REQ-014 | Rule `lint-strict` — `flake8 .` and `mypy . --strict` | SHOULD | A | `Makefile` | `make lint-strict` | TODO |
+| REQ-008 | Makefile present in the project | MUST | A | `Makefile` | file exists at repo root | DONE |
+| REQ-009 | Rule `install` — installs dependencies | MUST | A | `Makefile` | `make install` in a fresh venv | DONE |
+| REQ-010 | Rule `run` — executes the main script | MUST | A | `Makefile` | `make run` launches the game | DONE |
+| REQ-011 | Rule `debug` — runs the main script under a debugger (pdb) | MUST | A | `Makefile` | `make debug` drops into pdb | DONE |
+| REQ-012 | Rule `clean` — removes `__pycache__`, `.mypy_cache` and similar | MUST | A | `Makefile` | `make clean` then `find . -name __pycache__` is empty | DONE |
+| REQ-013 | Rule `lint` — `flake8 .` and `mypy .` with the exact flags from the subject | MUST | A | `Makefile` | flags match the subject verbatim | DONE |
+| REQ-014 | Rule `lint-strict` — `flake8 .` and `mypy . --strict` | SHOULD | A | `Makefile` | `make lint-strict` | DONE |
 
 > REQ-013 flags, verbatim: `--warn-return-any --warn-unused-ignores --ignore-missing-imports --disallow-untyped-defs --check-untyped-defs`
 
@@ -62,8 +62,8 @@ are out of scope until every MUST row below is DONE.
 |---|---|---|---|---|---|---|
 | REQ-018 | Complete and playable Pac-Man game | MUST | A+B | — | full playthrough from menu to victory | TODO |
 | REQ-019 | Written using object-oriented programming | MUST | A+B | — | architecture review; classes per entity | TODO |
-| REQ-020 | Uses a simple graphical library, MLX or similar | MUST | B | `project-management/graphics-library.md` | every primitive used has an MLX equivalent | TODO |
-| REQ-021 | Every graphics function used has an MLX equivalent | MUST | B | `project-management/graphics-library.md` | mapping table, confirmed with staff | TODO |
+| REQ-020 | Uses a simple graphical library, MLX or similar | MUST | B | `project-management/graphics-library.md` | every primitive used has an MLX equivalent | WIP |
+| REQ-021 | Every graphics function used has an MLX equivalent | MUST | B | `project-management/graphics-library.md` | mapping table, confirmed with staff | WIP |
 | REQ-022 | Modular, reusable architecture | MUST | A+B | — | game logic runs headless, without the renderer | TODO |
 | REQ-023 | Custom configuration via a JSON file with comments | MUST | A | — | see V.2 rows | TODO |
 | REQ-024 | Robust error handling — no crash | MUST | A+B | — | faulty-config suite + adversarial session | TODO |
