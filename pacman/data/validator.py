@@ -129,3 +129,40 @@ def validate_config(data: dict[str, Any]) -> dict[str, Any]:
     for msg in messages:
         print(msg)
     return clean
+
+
+def level_seed(base: int, index: int) -> int:
+    """Derive a level's maze seed from the config seed.
+
+    One seed in the config deterministically reshapes every maze:
+    level N always generates from the same seed for a given config.
+
+    Args:
+        base: Top-level config seed (already clamped to >= 1).
+        index: Zero-based level number (0 for the first level).
+
+    Returns:
+        The seed to generate this level's maze with.
+    """
+    return base + index
+
+
+def fit_pacgum(
+    requested: int, free_cells: int
+) -> tuple[int, Optional[str]]:
+    """Fit the pacgum count to the maze's walkable cells.
+
+    The upper bound is known only after maze generation, so the
+    future maze adapter calls this once walkable cells are known.
+
+    Args:
+        requested: Pacgum count from the validated level (>= 0).
+        free_cells: Walkable cells in the generated maze.
+
+    Returns:
+        Pair (fitted count, message); message is None if unchanged.
+    """
+    fitted = max(0, min(requested, free_cells))
+    if fitted != requested:
+        return fitted, f"pacgum: {requested} exceeds {free_cells} cells"
+    return fitted, None
