@@ -297,7 +297,7 @@ questioned at the defense, so the reasoning matters more than the choice.
 
 | Ref | Decision to make | Chosen | Rationale |
 |---|---|---|---|
-| REQ-037 | Support C / C++ comment styles in the config, beyond `#` lines | — | — |
+| REQ-037 | Support C / C++ comment styles in the config, beyond `#` lines | Yes: `#`, `//` and `/* */` | C-style comments are familiar to C reviewers; stripping is string-aware so `//` inside JSON strings is preserved; block comments handled multiline; single preprocessor function covered by the evil-config suite (T2.9) |
 | REQ-063 | Highscore storage medium and format | — | — |
 | REQ-091 | Ghost chase behaviour | — | — |
 | REQ-098 | Which cheats to implement | — | — |
