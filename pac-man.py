@@ -6,7 +6,7 @@ Usage:
 
 import sys
 from pacman.data.cli import parse
-from pacman.data.loader import read_config
+from pacman.data.loader import read_config, strip_comments
 from pacman.errors import ConfigError
 
 
@@ -26,10 +26,11 @@ def main(argv: list[str]) -> int:
         print("Usage: python3 pac-man.py config.json", file=sys.stderr)
         return 2
     try:
-        read_config(config_parse)
+        text = read_config(config_parse)
     except ConfigError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
+    text = strip_comments(text)
     print("pac-man: skeleton", argv)
     return 0
 
