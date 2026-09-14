@@ -1,7 +1,3 @@
-from ast import arg
-import sys
-
-
 def parse(argv: list[str]) -> str:
     """
     Parses command-line arguments and returns an exit code.

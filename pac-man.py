@@ -4,9 +4,10 @@ Usage:
     python3 pac-man.py config.json
 """
 
-from pydoc import cli
 import sys
 from pacman.data.cli import parse
+from pacman.data.loader import read_config
+from pacman.errors import ConfigError
 
 
 def main(argv: list[str]) -> int:
@@ -19,10 +20,16 @@ def main(argv: list[str]) -> int:
         Process exit code: 0 on success, non-zero on error.
     """
     try:
-        config_file = parse(argv)
+        config_parse = parse(argv)
     except ValueError as e:
         print(f"Error: {e}", file=sys.stderr)
+        print("Usage: python3 pac-man.py config.json", file=sys.stderr)
         return 2
+    try:
+        read_config(config_parse)
+    except ConfigError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
     print("pac-man: skeleton", argv)
     return 0
 
