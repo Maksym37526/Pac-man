@@ -1,7 +1,7 @@
 """Loading and preprocessing of the configuration file."""
 
 import re
-
+import json
 from pacman.errors import ConfigError
 
 
@@ -52,3 +52,26 @@ def strip_comments(text: str) -> str:
         The text with all comments removed.
     """
     return COMMENT_REM.sub(_replace_comment, text)
+
+
+def parse_json(text: str) -> dict:
+    """Parse JSON text into a Python dictionary.
+
+    Args:
+        text: JSON text to parse.
+
+    Returns:
+        The parsed JSON as a Python dictionary.
+
+    Raises:
+        ConfigError: If the JSON is invalid.
+    """
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as e:
+        raise ConfigError(
+            f"Invalid JSON: {e.msg} at line {e.lineno}, column {e.colno}")
+    if not isinstance(data, dict):
+        raise ConfigError(
+            f"Top-level must be an object, got {type(data).__name__}")
+    return data
