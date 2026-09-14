@@ -78,20 +78,20 @@ are out of scope until every MUST row below is DONE.
 
 | ID | Requirement | T | Owner | Where | Verify | St |
 |---|---|---|---|---|---|---|
-| REQ-031 | Launched as `python3 pac-man.py config.json` | MUST | A | `pac-man.py` | entry-point filename matches exactly | TODO |
-| REQ-032 | Takes exactly one argument | MUST | A | — | run with 0, 1 and 2 arguments | TODO |
-| REQ-033 | Argument must be a json file; the filename itself does not matter | MUST | A | — | run with `foo.json`, `foo.txt`, no extension | TODO |
-| REQ-034 | Every error handled with a clear message, never a Python traceback | MUST | A | — | faulty-config suite; stderr contains no traceback | TODO |
+| REQ-031 | Launched as `python3 pac-man.py config.json` | MUST | A | `pac-man.py` | entry-point filename matches exactly | DONE |
+| REQ-032 | Takes exactly one argument | MUST | A | — | run with 0, 1 and 2 arguments | DONE |
+| REQ-033 | Argument must be a json file; the filename itself does not matter | MUST | A | — | run with `foo.json`, `foo.txt`, no extension | DONE |
+| REQ-034 | Every error handled with a clear message, never a Python traceback | MUST | A | — | faulty-config suite; stderr contains no traceback | DONE |
 
 ## V.2 — Configuration file
 
 | ID | Requirement | T | Owner | Where | Verify | St |
 |---|---|---|---|---|---|---|
-| REQ-035 | Config parsed as JSON | MUST | A | — | valid config loads | TODO |
-| REQ-036 | Lines starting with `#` treated as comments and ignored | MUST | A | — | config with `#` lines at various indents | TODO |
-| REQ-037 | Additional comment styles (C or C++) supported | FREE | A | — | decision recorded below | TODO |
+| REQ-035 | Config parsed as JSON | MUST | A | — | valid config loads | DONE |
+| REQ-036 | Lines starting with `#` treated as comments and ignored | MUST | A | — | config with `#` lines at various indents | DONE |
+| REQ-037 | Additional comment styles (C or C++) supported | FREE | A | — | decision recorded below | DONE |
 | REQ-038 | All config keys documented in the README | MUST | B | `README.md` | every key in the spec table appears in README | TODO |
-| REQ-039 | Robust defaults provided for every key | MUST | A | — | empty `{}` config launches the game | TODO |
+| REQ-039 | Robust defaults provided for every key | MUST | A | — | empty `{}` config launches the game | DONE |
 | REQ-040 | Key `highscore_filename` supported | MUST | A | — | custom path honoured | TODO |
 | REQ-041 | Key `level` — array of multiple levels | MUST | A | — | config with 3 levels produces 3 distinct levels | TODO |
 | REQ-042 | Keys `width` / `height` per level | MUST | A | — | maze dimensions match the config | TODO |
@@ -107,11 +107,11 @@ are out of scope until every MUST row below is DONE.
 
 | ID | Requirement | T | Owner | Where | Verify | St |
 |---|---|---|---|---|---|---|
-| REQ-050 | Missing or invalid values clamped to safe defaults | MUST | A | — | faulty-config suite | TODO |
-| REQ-051 | A clear message is logged for every correction, then execution continues | MUST | A | — | stdout lists each clamped key | TODO |
-| REQ-052 | Unknown keys ignored silently | MUST | A | — | config with junk keys still launches | TODO |
-| REQ-053 | No traceback under any config input | MUST | A | — | faulty-config suite | TODO |
-| REQ-054 | Survives a configuration replaced during the defense | MUST | A | `tests/configs/` | ≥15 adversarial config files pass | TODO |
+| REQ-050 | Missing or invalid values clamped to safe defaults | MUST | A | — | faulty-config suite | DONE |
+| REQ-051 | A clear message is logged for every correction, then execution continues | MUST | A | — | stdout lists each clamped key | DONE |
+| REQ-052 | Unknown keys ignored silently | MUST | A | — | config with junk keys still launches | DONE |
+| REQ-053 | No traceback under any config input | MUST | A | — | faulty-config suite | DONE |
+| REQ-054 | Survives a configuration replaced during the defense | MUST | A | `tests/configs/` | ≥15 adversarial config files pass | DONE |
 
 ## V.4 — Maze generator integration
 
@@ -204,7 +204,7 @@ are out of scope until every MUST row below is DONE.
 
 | ID | Requirement | T | Owner | Where | Verify | St |
 |---|---|---|---|---|---|---|
-| REQ-102 | The game has at least 10 levels | MUST | A | — | count levels; short configs padded to 10 | TODO |
+| REQ-102 | The game has at least 10 levels | MUST | A | — | count levels; short configs padded to 10 | DONE |
 | REQ-103 | Each level has a time limit | MUST | A | — | HUD timer counts down | TODO |
 | REQ-104 | Behaviour when the time limit is reached is our choice | FREE | A | — | decision recorded below | TODO |
 | REQ-105 | Completing a level moves the player to the next level | MUST | A | — | clear level 1, land on level 2 | TODO |
