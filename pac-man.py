@@ -4,7 +4,9 @@ Usage:
     python3 pac-man.py config.json
 """
 
+from pydoc import cli
 import sys
+from pacman.data.cli import parse
 
 
 def main(argv: list[str]) -> int:
@@ -16,6 +18,11 @@ def main(argv: list[str]) -> int:
     Returns:
         Process exit code: 0 on success, non-zero on error.
     """
+    try:
+        config_file = parse(argv)
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 2
     print("pac-man: skeleton", argv)
     return 0
 
