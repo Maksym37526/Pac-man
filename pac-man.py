@@ -8,6 +8,7 @@ import sys
 from pacman.data.cli import parse
 from pacman.data.loader import read_config, strip_comments, parse_json
 from pacman.errors import ConfigError
+from pacman.data.validator import validate_config
 
 
 def main(argv: list[str]) -> int:
@@ -28,7 +29,7 @@ def main(argv: list[str]) -> int:
     try:
         raw_text = read_config(config_parse)
         text = strip_comments(raw_text)
-        parse_json(text)
+        validate_config(parse_json(text))
     except ConfigError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
