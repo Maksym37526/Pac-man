@@ -1,4 +1,10 @@
+"""Immutable config structures (T2.8).
+
+Pure repackaging of the validated dict from T2.6; no validation here.
+"""
+
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -20,7 +26,7 @@ class Config:
     levels: tuple[LevelConfig, ...]
 
 
-def build_config(clean: dict) -> Config:
+def build_config(clean: dict[str, Any]) -> Config:
     """Freeze a clean config dict into immutable structures.
 
     Pure repackaging, no validation: the input is already clean by

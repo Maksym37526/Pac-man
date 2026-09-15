@@ -2,6 +2,7 @@
 
 import re
 import json
+from typing import Any
 from pacman.errors import ConfigError
 
 
@@ -14,9 +15,13 @@ def read_config(path: str) -> str:
         with open(path, "r", encoding="utf-8") as f:
             return f.read()
     except OSError as e:
-        raise ConfigError(f"Cannot read config file '{path}': {e.strerror}")
+        raise ConfigError(
+            f"Cannot read config file '{path}': {e.strerror}"
+        ) from e
     except UnicodeDecodeError as e:
-        raise ConfigError(f"Cannot decode config file '{path}': {e.reason}")
+        raise ConfigError(
+            f"Cannot decode config file '{path}': {e.reason}"
+        ) from e
 
 
 COMMENT_REM = re.compile(
@@ -54,7 +59,7 @@ def strip_comments(text: str) -> str:
     return COMMENT_REM.sub(_replace_comment, text)
 
 
-def parse_json(text: str) -> dict:
+def parse_json(text: str) -> dict[str, Any]:
     """Parse JSON text into a Python dictionary.
 
     Args:
@@ -70,7 +75,8 @@ def parse_json(text: str) -> dict:
         data = json.loads(text)
     except json.JSONDecodeError as e:
         raise ConfigError(
-            f"Invalid JSON: {e.msg} at line {e.lineno}, column {e.colno}")
+            f"Invalid JSON: {e.msg} at line {e.lineno}, column {e.colno}"
+        ) from e
     if not isinstance(data, dict):
         raise ConfigError(
             f"Top-level must be an object, got {type(data).__name__}")

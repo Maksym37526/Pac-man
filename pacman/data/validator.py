@@ -7,9 +7,14 @@ from pacman.data.spec import (
     LEVELS,
     LEVELS_FILL_RULE,
     LEVELS_MIN_COUNT,
+    ODD,
+    ON_BAD_DEFAULT,
     TOP_LEVEL,
     KeySpec,
 )
+from pacman.log import get_logger
+
+logger = get_logger(__name__)
 
 
 def _type_msg(spec: KeySpec, value: Any) -> str:
@@ -35,13 +40,26 @@ def _clean_value(value: Any, spec: KeySpec) -> tuple[Any, Optional[str]]:
         return spec.default, _type_msg(spec, value)
     fixed: Any = value
     if isinstance(value, (int, float)) and not isinstance(value, bool):
+        out_of_range = (
+            (spec.min is not None and fixed < spec.min)
+            or (spec.max is not None and fixed > spec.max)
+        )
+        if out_of_range:
+            if spec.on_bad == ON_BAD_DEFAULT:
+                return spec.default, _type_msg(spec, value)
+            if spec.min is not None and fixed < spec.min:
+                fixed = spec.min
+            if spec.max is not None and fixed > spec.max:
+                fixed = spec.max
+    if spec.normalize == ODD and fixed % 2 == 0:
+        # PKG-2: an even width puts a wall block in the maze centre.
+        # -1 (not +1) so the fix never exceeds max; re-clamp
+        # afterwards for safety if min/max are ever even.
+        fixed -= 1
         if spec.min is not None and fixed < spec.min:
             fixed = spec.min
         if spec.max is not None and fixed > spec.max:
             fixed = spec.max
-    if spec.normalize == "odd" and fixed % 2 == 0:
-        # PKG-2: an even width puts a wall block in the maze centre.
-        fixed += 1
     if fixed != value:
         return fixed, _fix_msg(spec, value, fixed)
     return value, None
@@ -99,7 +117,7 @@ def validate_config(data: dict[str, Any]) -> dict[str, Any]:
     """Validate the raw config dict against the spec tables.
 
     Unknown keys are dropped silently (REQ-052). Each correction
-    is printed to stdout (REQ-051). Never raises: bad input
+    is logged as a warning to stderr (REQ-051). Never raises: bad input
     becomes safe defaults (REQ-050).
 
     Args:
@@ -127,7 +145,7 @@ def validate_config(data: dict[str, Any]) -> dict[str, Any]:
         if msg is not None:
             messages.append(msg)
     for msg in messages:
-        print(msg)
+        logger.warning(msg)
     return clean
 
 

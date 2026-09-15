@@ -8,6 +8,7 @@ import sys
 from pacman.data.cli import parse
 from pacman.data.loader import read_config, strip_comments, parse_json
 from pacman.errors import ConfigError
+from pacman.log import setup_logging
 from pacman.data.validator import validate_config
 from pacman.data.config import build_config
 
@@ -21,9 +22,10 @@ def main(argv: list[str]) -> int:
     Returns:
         Process exit code: 0 on success, non-zero on error.
     """
+    setup_logging()
     try:
         config_parse = parse(argv)
-    except ValueError as e:
+    except ConfigError as e:
         print(f"Error: {e}", file=sys.stderr)
         print("Usage: python3 pac-man.py config.json", file=sys.stderr)
         return 2
