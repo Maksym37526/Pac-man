@@ -1,4 +1,9 @@
-from typing import Protocol
+from typing import Protocol, Final
+WALL_N: Final[int] = 1
+WALL_E: Final[int] = 2
+WALL_S: Final[int] = 4
+WALL_W: Final[int] = 8
+ALL_WALLS: Final[int] = WALL_N | WALL_E | WALL_S | WALL_W
 
 
 class MazeSource(Protocol):
