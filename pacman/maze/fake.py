@@ -262,3 +262,19 @@ def as_rows(grid: Sequence[Sequence[int]]) -> str:
     """Render a grid as aligned numbers, for readable test failures."""
     return "\n".join(" ".join(f"{value:2d}" for value in row)
                      for row in grid)
+
+
+class NoisyFactory:
+    """A factory that prints to stdout, as the real package does."""
+
+    def __init__(self, grid: list[list[int]], message: str) -> None:
+        """Store the grid and the message to print."""
+        self._grid = grid
+        self._message = message
+
+    def __call__(
+        self, *, size: tuple[int, int], perfect: bool, seed: int
+    ) -> MazeSource:
+        """Print the message, then return the stored grid."""
+        print(self._message)
+        return FakeMazeSource(self._grid)
