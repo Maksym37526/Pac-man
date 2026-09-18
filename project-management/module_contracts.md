@@ -247,11 +247,10 @@ pixel by pixel, which is expensive, and the maze does not change during a level.
 ```
 pacman/
 ├── log.py    A   logging setup, shared by every package
-
 ├── errors.py A   project-specific exception hierarchy, shared by every package
 ├── core/     A   entities, movement, ghost behaviour, rules, scoring, timer
 ├── maze/     A   adapter to mazegenerator, normalisation, invariant checks
-├── data/       A   config loading and validation, highscore persistence
+├── data/     A   config loading and validation, highscore persistence
 ├── render/   B   graphics facade, renderer, sprite loading
 └── ui/       B   application state machine, screens, input translation
 ```
@@ -323,7 +322,21 @@ single root, so that any layer can catch "everything our code raises" with one
 
 ---
 
-## 10. Open points
+## 10. Randomness
+
+The assigned generator calls `random.seed()` on the global `random` module
+(PKG-4), which resets any global randomness the game relies on. Generating a
+level would therefore silently reshuffle anything else that used the global
+module.
+
+The game consequently uses its own `Random` instances and never the module-level
+functions. One instance is created per run and passed explicitly to everything
+that needs randomness: pacgum placement, and the seed of every level after the
+first. Tests pass a seeded instance, so a whole run is reproducible from a single
+point.
+
+---
+## 11. Open points
 
 Recorded here so they are not silently decided by whoever writes the code first.
 

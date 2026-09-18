@@ -163,24 +163,3 @@ def level_seed(base: int, index: int) -> int:
         The seed to generate this level's maze with.
     """
     return base + index
-
-
-def fit_pacgum(
-    requested: int, free_cells: int
-) -> tuple[int, Optional[str]]:
-    """Fit the pacgum count to the maze's walkable cells.
-
-    The upper bound is known only after maze generation, so the
-    future maze adapter calls this once walkable cells are known.
-
-    Args:
-        requested: Pacgum count from the validated level (>= 0).
-        free_cells: Walkable cells in the generated maze.
-
-    Returns:
-        Pair (fitted count, message); message is None if unchanged.
-    """
-    fitted = max(0, min(requested, free_cells))
-    if fitted != requested:
-        return fitted, f"pacgum: {requested} exceeds {free_cells} cells"
-    return fitted, None
