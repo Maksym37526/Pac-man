@@ -159,8 +159,10 @@ Immutable. The raw parsed dictionary never travels beyond the loader.
 
 ## 4. Contract: `GameState`
 
-The single object the renderer reads. **The renderer never mutates it.** This is
-the seam between A and B, and the reason the game can run headless.
+The single object the renderer reads. **The renderer never mutates it.**
+GameState itself is mutable (it changes ~60 times a second), but only
+`core/rules.py` writes to it. This is the seam between A and B, and the
+reason the game can run headless.
 
 | Field | Type | Meaning |
 |---|---|---|
@@ -177,6 +179,11 @@ the seam between A and B, and the reason the game can run headless.
 | `frightened_remaining` | `float` | seconds left of the edible state; `0.0` when inactive |
 | `cheats` | `CheatState` | which cheats are currently active, for the HUD indicator |
 
+Phase 5 implements `maze`, `player`, `pacgums`, `super_pacgums`
+and `score`; `ghosts`, `lives`, `level_index`, `level_count`,
+`time_remaining`, `frightened_remaining` and `cheats` arrive in
+Phases 6 and 7.
+
 ### `Entity`
 
 | Field | Type | Meaning |
@@ -184,9 +191,16 @@ the seam between A and B, and the reason the game can run headless.
 | `cell` | `Cell` | the cell being moved into |
 | `prev_cell` | `Cell` | the cell being moved out of |
 | `progress` | `float` | 0.0 to 1.0 along the transition, per D1 |
-| `direction` | `Direction` | current direction of travel |
+| `direction` | `Direction \| None` | current direction of travel; `None` means standing (B must handle it, e.g. keep the last sprite orientation) |
+| `next_direction` | `Direction \| None` | desired turn at the next cell boundary; filled by keyboard for the player, by AI for ghosts (Phase 6) |
 | `kind` | `EntityKind` | `PLAYER` or one of the four ghost identities |
 | `mode` | `EntityMode` | `NORMAL`, `FRIGHTENED`, `EATEN`, `RESPAWNING` |
+
+A standing entity has `cell == prev_cell`, `progress == 0.0` and
+`direction is None`, so interpolation yields exactly `cell` with no
+special case. Speed is not a field of the entity: it is computed in
+`rules.py` from a base value plus the current state (fright, cheats)
+and passed into the movement function.
 
 The renderer computes the world position by interpolating between `prev_cell`
 and `cell` using `progress`, then converts to screen coordinates. It needs
@@ -202,6 +216,17 @@ nothing else.
 | `AppState` | `MAIN_MENU`, `INSTRUCTIONS`, `HIGHSCORES`, `PLAYING`, `PAUSED`, `GAME_OVER`, `VICTORY`, `NAME_ENTRY`, `EXIT` |
 
 `AppState` is taken directly from subject IV and VI.8. No states beyond these.
+
+### `GameEvent`
+
+Returned by `tick()` alongside the mutated state; B reads these for
+the HUD. Phases 6 and 7 extend the enum, they never reinterpret it.
+
+| Event | Fires when |
+|---|---|
+| `PACGUM_EATEN` | the player enters a cell holding an ordinary pacgum |
+| `SUPER_PACGUM_EATEN` | the player enters a cell holding a super-pacgum |
+| `LEVEL_CLEARED` | the tick that eats the last remaining dot (ordinary and super sets both empty); exactly once, never repeated on later ticks |
 
 ---
 
@@ -222,6 +247,11 @@ B translates raw key events into these; A never sees a key code.
 
 Movement events carry intent, not state. A stores the most recent one as the
 desired direction and applies it at the next commit point, per D1.
+
+Boundary: `core` accepts movement as a `Direction` via
+`set_direction()`, never as an `InputEvent` — `InputEvent` lives in
+`ui/`, which `core` must not import. The composition layer translates
+`MOVE_*` into `Direction` and calls `set_direction()`.
 
 ---
 
@@ -343,7 +373,7 @@ Recorded here so they are not silently decided by whoever writes the code first.
 | # | Question | Depends on |
 |---|---|---|
 | 1 | Exact tile size in pixels, and therefore sprite dimensions | D2, asset authoring |
-| 2 | Player and ghost movement speed, in cells per second | playtesting |
+| 2 | Player and ghost movement speed, in cells per second | provisionally 8 cells/s (`PLAYER_SPEED`), pending playtesting |
 | 3 | Duration of the frightened state | playtesting, REQ-087 |
 | 4 | Ghost respawn delay within the 5–10 s range | REQ-093 |
 | 5 | Ghost chase behaviour | REQ-091, still open in the matrix |
