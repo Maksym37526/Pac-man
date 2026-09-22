@@ -278,3 +278,32 @@ class NoisyFactory:
         """Print the message, then return the stored grid."""
         print(self._message)
         return FakeMazeSource(self._grid)
+
+
+# For render only!
+
+from pacman.maze.model import Cell, Direction, Maze
+
+def tiny_maze() -> Maze:
+    """3x3 open maze, centre cell blocked — enough to exercise walls + blocks."""
+    width, height = 3, 3
+    all_cells = [Cell(c, r) for r in range(height) for c in range(width)]
+    passages: dict[Cell, frozenset[Direction]] = {}
+    for cell in all_cells:
+        if cell == Cell(1, 1):
+            continue  # blocked centre — no passages entry
+        open_dirs = set()
+        for d in Direction:
+            neighbour = Cell(cell.col + d.vector_x, cell.row + d.vector_y)
+            in_bounds = 0 <= neighbour.col < width and 0 <= neighbour.row < height
+            if in_bounds and neighbour != Cell(1, 1):
+                open_dirs.add(d)
+        passages[cell] = frozenset(open_dirs)
+    return Maze(
+        width=width,
+        height=height,
+        passages=passages,
+        blocks=frozenset({Cell(1, 1)}),
+        centre=Cell(0, 0),
+        corners=(Cell(0, 0), Cell(2, 0), Cell(0, 2), Cell(2, 2)),
+    )
