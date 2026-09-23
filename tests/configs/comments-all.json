@@ -1,0 +1,7 @@
+# top comment
+{
+  // line comment
+  "lives": 2, /* inline block */ "seed": 7,
+  "tag": "a//b",
+  "levels": [{}, {}, {}, {}, {}, {}, {}, {}, {}, {}]
+}

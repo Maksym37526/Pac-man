@@ -1,0 +1,5 @@
+vendor/mazegenerator-2.1.0-py3-none-any.whl
+pygame-ce==2.5.8
+flake8
+mypy
+pytest
