@@ -1,14 +1,23 @@
 """Tests for movement: pacman.core.movement and rules.tick motion."""
 
+from random import Random
+
 from pacman.core.entity import Entity, EntityKind
 from pacman.core.movement import advance, can_go, choose_direction
-from pacman.core.rules import PLAYER_SPEED, set_direction, tick
-from pacman.core.state import GameState, ScoringRules
+from pacman.core.rules import set_direction, tick
+from pacman.core.settings import GameSettings
+from pacman.core.state import GameState
 from pacman.maze.model import Cell, Direction
 from tests.helpers import run_for
 
-SCORING = ScoringRules(pacgum=10, super_pacgum=50, ghost=200)
-ONE_CELL = 1.0 / PLAYER_SPEED
+SETTINGS = GameSettings(
+    pacgum=10,
+    super_pacgum=50,
+    ghost=200,
+    ghost_speed=0.0,
+    frightened_speed=0.0,
+)
+ONE_CELL = 1.0 / SETTINGS.player_speed
 """Base frame time: 1.5x enters exactly one cell, 2.5x exactly two.
 
 Mid-cell margins, not exact multiples: speed * (2 / speed) can
@@ -16,11 +25,13 @@ round to 1.999... and enter one cell short. Tests follow any speed.
 """
 
 
-def test_stands_still_without_input(empty_state: GameState) -> None:
+def test_stands_still_without_input(
+    empty_state: GameState,
+) -> None:
     """No direction set: the player never leaves the start cell."""
     state: GameState = empty_state
     start = state.player.cell
-    events = tick(state, SCORING, 0.1)
+    events = tick(state, SETTINGS, Random(11), 0.1)
     assert state.player.cell == start
     assert state.player.direction is None
     assert events == []
@@ -30,7 +41,7 @@ def test_starts_moving_on_input(empty_state: GameState) -> None:
     """Setting RIGHT moves the player east within one cell tick."""
     state: GameState = empty_state
     set_direction(state, Direction.RIGHT)
-    run_for(state, SCORING, 1.5 * ONE_CELL)
+    run_for(state, SETTINGS, Random(12), 1.5 * ONE_CELL)
     assert state.player.prev_cell == Cell(3, 2)
     assert state.player.direction == Direction.RIGHT
 
@@ -39,9 +50,9 @@ def test_stops_at_wall(empty_state: GameState) -> None:
     """Driving into the border stops with zero leftover progress."""
     state: GameState = empty_state
     set_direction(state, Direction.LEFT)
-    run_for(state, SCORING, 1.5 * ONE_CELL)
-    run_for(state, SCORING, 1.5 * ONE_CELL)
-    run_for(state, SCORING, 1.5 * ONE_CELL)
+    run_for(state, SETTINGS, Random(13), 1.5 * ONE_CELL)
+    run_for(state, SETTINGS, Random(13), 1.5 * ONE_CELL)
+    run_for(state, SETTINGS, Random(13), 1.5 * ONE_CELL)
     assert state.player.cell == Cell(0, 2)
     assert state.player.direction is None
     assert state.player.progress == 0.0
@@ -51,9 +62,9 @@ def test_turns_at_intersection(empty_state: GameState) -> None:
     """A turn request applies at the next cell boundary."""
     state: GameState = empty_state
     set_direction(state, Direction.RIGHT)
-    run_for(state, SCORING, 1.5 * ONE_CELL)
+    run_for(state, SETTINGS, Random(14), 1.5 * ONE_CELL)
     set_direction(state, Direction.DOWN)
-    run_for(state, SCORING, 1.5 * ONE_CELL)
+    run_for(state, SETTINGS, Random(14), 1.5 * ONE_CELL)
     assert state.player.direction == Direction.DOWN
 
 

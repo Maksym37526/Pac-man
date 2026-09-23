@@ -1,13 +1,19 @@
 """Shared step-splitting helper for the core test suite."""
 
+from random import Random
+
 from pacman.core.events import GameEvent
 from pacman.core.movement import MAX_DT
 from pacman.core.rules import tick
-from pacman.core.state import GameState, ScoringRules
+from pacman.core.settings import GameSettings
+from pacman.core.state import GameState
 
 
 def run_for(
-    state: GameState, scoring: ScoringRules, seconds: float
+    state: GameState,
+    settings: GameSettings,
+    rng: Random,
+    seconds: float,
 ) -> list[GameEvent]:
     """Tick in steps of at most MAX_DT, collecting every event.
 
@@ -19,6 +25,6 @@ def run_for(
     remaining = seconds
     while remaining > 0.0:
         step = min(MAX_DT, remaining)
-        events += tick(state, scoring, step)
+        events += tick(state, settings, rng, step)
         remaining -= step
     return events

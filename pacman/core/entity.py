@@ -27,7 +27,15 @@ class EntityMode(Enum):
     NORMAL = auto()
     FRIGHTENED = auto()
     EATEN = auto()
-    RESPAWNING = auto()
+
+
+GHOST_KINDS: tuple[EntityKind, EntityKind, EntityKind, EntityKind] = (
+    EntityKind.GHOST_1,
+    EntityKind.GHOST_2,
+    EntityKind.GHOST_3,
+    EntityKind.GHOST_4,
+)
+"""The four ghost identities, in corner order (see MazeLayout)."""
 
 
 @dataclass
@@ -46,7 +54,11 @@ class Entity:
         progress: How far along the transition, 0.0 to 1.0.
         direction: Current travel direction, None when standing.
         next_direction: Desired turn at the next cell boundary.
+        home: Where this entity respawns (player: centre,
+            ghost: its own corner).
         mode: Current entity mode.
+        mode_timer: Seconds left in the current mode, used
+            only for EATEN ghosts.
     """
 
     kind: EntityKind
@@ -55,15 +67,20 @@ class Entity:
     progress: float
     direction: Direction | None
     next_direction: Direction | None
+    home: Cell
     mode: EntityMode = EntityMode.NORMAL
+    mode_timer: float = 0.0
 
     @classmethod
     def standing_at(cls, kind: EntityKind, cell: Cell) -> "Entity":
         """Create a standing entity at a cell.
 
+        The entity starts at its own home: both the player and
+        every ghost begin the level where they respawn.
+
         Args:
             kind: Who this entity is.
-            cell: The cell to stand on.
+            cell: The cell to stand on, also stored as home.
 
         Returns:
             A motionless entity with no direction set.
@@ -75,4 +92,17 @@ class Entity:
             progress=0.0,
             direction=None,
             next_direction=None,
+            home=cell,
         )
+
+    def place_at_home(self) -> None:
+        """Put the entity back at home, standing still.
+
+        Keeps kind, home and mode: the caller sets the mode
+        (and timer) that the respawn requires.
+        """
+        self.cell = self.home
+        self.prev_cell = self.home
+        self.progress = 0.0
+        self.direction = None
+        self.next_direction = None

@@ -180,9 +180,9 @@ reason the game can run headless.
 | `cheats` | `CheatState` | which cheats are currently active, for the HUD indicator |
 
 Phase 5 implements `maze`, `player`, `pacgums`, `super_pacgums`
-and `score`; `ghosts`, `lives`, `level_index`, `level_count`,
-`time_remaining`, `frightened_remaining` and `cheats` arrive in
-Phases 6 and 7.
+and `score`; Phase 6 adds `ghosts`, `lives` and
+`frightened_remaining`; `level_index`, `level_count`,
+`time_remaining` and `cheats` arrive in Phase 7.
 
 ### `Entity`
 
@@ -192,19 +192,22 @@ Phases 6 and 7.
 | `prev_cell` | `Cell` | the cell being moved out of |
 | `progress` | `float` | 0.0 to 1.0 along the transition, per D1 |
 | `direction` | `Direction \| None` | current direction of travel; `None` means standing (B must handle it, e.g. keep the last sprite orientation) |
-| `next_direction` | `Direction \| None` | desired turn at the next cell boundary; filled by keyboard for the player, by AI for ghosts (Phase 6) |
+| `next_direction` | `Direction \| None` | desired turn at the next cell boundary; filled by keyboard for the player, by AI for ghosts |
 | `kind` | `EntityKind` | `PLAYER` or one of the four ghost identities |
-| `mode` | `EntityMode` | `NORMAL`, `FRIGHTENED`, `EATEN`, `RESPAWNING` |
+| `home` | `Cell` | respawn cell: centre for the player, own corner per ghost |
+| `mode` | `EntityMode` | `NORMAL`, `FRIGHTENED`, `EATEN` |
+| `mode_timer` | `float` | seconds left in the mode; used only for `EATEN` |
 
-A standing entity has `cell == prev_cell`, `progress == 0.0` and
-`direction is None`, so interpolation yields exactly `cell` with no
-special case. Speed is not a field of the entity: it is computed in
-`rules.py` from a base value plus the current state (fright, cheats)
-and passed into the movement function.
+`RESPAWNING` was removed from the enum in Phase 6: an eaten ghost
+waits out its timer in `EATEN` and teleports home, so no fourth
+state is needed. Speed is not a field of the entity: it is computed
+in `rules.py` from `GameSettings` plus the current state (fright,
+cheats) and passed into the movement function.
 
 The renderer computes the world position by interpolating between `prev_cell`
-and `cell` using `progress`, then converts to screen coordinates. It needs
-nothing else.
+and `cell` using `progress`, then converts to screen coordinates. The exact
+formula lives in `core/collision.py` (`world_position`): B reuses it instead
+of writing a second copy.
 
 ### Enumerations
 
@@ -212,7 +215,7 @@ nothing else.
 |---|---|
 | `Direction` | `UP`, `DOWN`, `LEFT`, `RIGHT` |
 | `EntityKind` | `PLAYER`, `GHOST_1`, `GHOST_2`, `GHOST_3`, `GHOST_4` |
-| `EntityMode` | `NORMAL`, `FRIGHTENED`, `EATEN`, `RESPAWNING` |
+| `EntityMode` | `NORMAL`, `FRIGHTENED`, `EATEN` |
 | `AppState` | `MAIN_MENU`, `INSTRUCTIONS`, `HIGHSCORES`, `PLAYING`, `PAUSED`, `GAME_OVER`, `VICTORY`, `NAME_ENTRY`, `EXIT` |
 
 `AppState` is taken directly from subject IV and VI.8. No states beyond these.
@@ -227,6 +230,27 @@ the HUD. Phases 6 and 7 extend the enum, they never reinterpret it.
 | `PACGUM_EATEN` | the player enters a cell holding an ordinary pacgum |
 | `SUPER_PACGUM_EATEN` | the player enters a cell holding a super-pacgum |
 | `LEVEL_CLEARED` | the tick that eats the last remaining dot (ordinary and super sets both empty); exactly once, never repeated on later ticks |
+| `GHOST_EATEN` | the player touches a `FRIGHTENED` ghost: +Z, ghost becomes `EATEN` |
+| `PLAYER_CAUGHT` | the player touches a `NORMAL` ghost: −1 life, player and ghosts respawn at home |
+| `GAME_OVER` | the tick that takes the last life; Phase 7 reacts to it |
+| `FRIGHT_STARTED` | a super-pacgum turns every `NORMAL` ghost `FRIGHTENED` (timer resets, never stacks) |
+| `FRIGHT_ENDED` | the fright timer crosses zero, or death cancels an active fright; exactly once per fright — paired events are always paired, including cancellation paths |
+
+### `GameSettings`
+
+Frozen tuning built outside `core` from `Config`, replacing the
+Phase 5 `ScoringRules`. `tick(state, settings, rng, dt)` takes it
+plus a `Random` passed separately (a generator is a consumed
+dependency, not a setting). Fields: three point values, three
+speeds (`player_speed` 8.0, `ghost_speed` 7.0 — slower so the game
+stays winnable, `frightened_speed` 4.0 — slower so ghosts stay
+catchable), `fright_duration`, `respawn_delay` (both 7.0 s),
+`collision_radius` (0.5 cells) and per-ghost `ghost_randomness`
+`(0.0, 0.1, 0.2, 0.3)` — the REQ-091 decision below.
+
+Note for B: `FRIGHTENED` and `EATEN` need distinct sprites (VI.3:
+the player must see who is edible), and `frightened_remaining` is
+available for the end-of-fright blink.
 
 ---
 
@@ -365,6 +389,17 @@ that needs randomness: pacgum placement, and the seed of every level after the
 first. Tests pass a seeded instance, so a whole run is reproducible from a single
 point.
 
+Ghost AI draws from that instance only when a ghost enters a new cell
+(or stands still), never once per frame: the number of draws depends on
+intersections crossed, not on the frame rate (pinned by
+`test_rng_use_is_frame_rate_independent`).
+
+Reproducibility holds for a fixed logic timestep. Ghosts sample the
+player's cell at the moment they reach an intersection, so changing
+the step size changes which cell they see. The main loop therefore
+drives tick at a constant dt, as D1 requires; the frame rate may
+vary, the logic step may not.
+
 ---
 ## 11. Open points
 
@@ -373,8 +408,8 @@ Recorded here so they are not silently decided by whoever writes the code first.
 | # | Question | Depends on |
 |---|---|---|
 | 1 | Exact tile size in pixels, and therefore sprite dimensions | D2, asset authoring |
-| 2 | Player and ghost movement speed, in cells per second | provisionally 8 cells/s (`PLAYER_SPEED`), pending playtesting |
-| 3 | Duration of the frightened state | playtesting, REQ-087 |
-| 4 | Ghost respawn delay within the 5–10 s range | REQ-093 |
-| 5 | Ghost chase behaviour | REQ-091, still open in the matrix |
+| 2 | Player and ghost movement speed, in cells per second | player 8.0, ghost 7.0, frightened 4.0 (`GameSettings`), pending playtesting |
+| 3 | Duration of the frightened state | provisionally 7.0 s (`GameSettings.fright_duration`), pending playtesting |
+| 4 | Ghost respawn delay within the 5–10 s range | provisionally 7.0 s (`GameSettings.respawn_delay`), pending playtesting |
+| 5 | Ghost chase behaviour | resolved: greedy Manhattan chase with per-ghost randomness, see the REQ-091 decision in the requirements matrix |
 | 6 | Behaviour when a level's time limit expires | REQ-104, still open in the matrix |
