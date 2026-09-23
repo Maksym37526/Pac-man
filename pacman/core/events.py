@@ -14,3 +14,8 @@ class GameEvent(Enum):
     PACGUM_EATEN = auto()
     SUPER_PACGUM_EATEN = auto()
     LEVEL_CLEARED = auto()
+    GHOST_EATEN = auto()
+    PLAYER_CAUGHT = auto()
+    GAME_OVER = auto()
+    FRIGHT_STARTED = auto()
+    FRIGHT_ENDED = auto()

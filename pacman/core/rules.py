@@ -1,18 +1,28 @@
-"""One game tick: movement, eating, win check (Phase 5).
+"""One game tick: movement, fright, collisions, win check.
 
 The only writer of GameState. The renderer reads the state and
 never mutates it.
+
+Step order is load-bearing:
+    1. clamp dt once, at the entry
+    2. fright timer (FRIGHT_ENDED on the crossing tick only)
+    3. eaten-ghost timers (home teleport on expiry)
+    4. player move and eating (super starts fright)
+    5. ghost moves (AI picks next_direction every tick)
+    6. collisions (one life per tick at most)
+    7. victory check, as in Phase 5
 """
 
-from typing import Final
+from random import Random
 
+from pacman.core.collision import is_touching
+from pacman.core.entity import EntityMode
 from pacman.core.events import GameEvent
-from pacman.core.movement import advance
-from pacman.core.state import GameState, ScoringRules
+from pacman.core.ghost import choose_ghost_direction, exit_candidates
+from pacman.core.movement import MAX_DT, advance
+from pacman.core.settings import GameSettings
+from pacman.core.state import GameState
 from pacman.maze.model import Direction
-
-PLAYER_SPEED: Final[float] = 8.0
-"""Player speed in cells per second (open point 2, playtesting)."""
 
 
 def set_direction(state: GameState, direction: Direction) -> None:
@@ -29,37 +39,140 @@ def set_direction(state: GameState, direction: Direction) -> None:
     state.player.next_direction = direction
 
 
-def tick(
-    state: GameState, scoring: ScoringRules, dt: float
-) -> list[GameEvent]:
-    """Advance the game by dt seconds.
+def _respawn_after_catch(state: GameState) -> bool:
+    """Put the player and every ghost back at home, standing.
 
-    Moves the player, eats whatever is on every entered cell,
-    and reports a win exactly once, on the tick that clears
-    the last pacgum.
+    Ghosts return to their corners so the player gets breathing
+    room (VI.2 is silent on ghosts; leaving them in place would
+    burn three lives in a second). An active fright is cancelled:
+    every ghost wakes up NORMAL.
 
     Args:
         state: The game state, mutated in place.
-        scoring: Points for each edible event.
-        dt: Seconds since the last tick.
+
+    Returns:
+        True if a fright was active and is now cancelled, so the
+        caller can emit the paired FRIGHT_ENDED event.
+    """
+    was_frightened = state.frightened_remaining > 0.0
+    state.player.place_at_home()
+    for ghost in state.ghosts:
+        ghost.place_at_home()
+        ghost.mode = EntityMode.NORMAL
+        ghost.mode_timer = 0.0
+    state.frightened_remaining = 0.0
+    return was_frightened
+
+
+def tick(
+    state: GameState,
+    settings: GameSettings,
+    rng: Random,
+    dt: float,
+) -> list[GameEvent]:
+    """Advance the game by dt seconds.
+
+    Args:
+        state: The game state, mutated in place.
+        settings: Static tuning (speeds, points, durations).
+        rng: The run's random source for ghost turns.
+        dt: Seconds since the last tick, clamped to MAX_DT.
 
     Returns:
         Events that happened during this tick, in order.
     """
     events: list[GameEvent] = []
-    entered = advance(state.player, state.maze, PLAYER_SPEED, dt)
+    if dt <= 0.0:
+        return events
+    dt = min(dt, MAX_DT)
+
+    if state.frightened_remaining > 0.0:
+        cooled = max(0.0, state.frightened_remaining - dt)
+        state.frightened_remaining = cooled
+        if cooled <= 0.0:
+            for ghost in state.ghosts:
+                if ghost.mode is EntityMode.FRIGHTENED:
+                    ghost.mode = EntityMode.NORMAL
+            events.append(GameEvent.FRIGHT_ENDED)
+
+    for ghost in state.ghosts:
+        if ghost.mode is EntityMode.EATEN:
+            ghost.mode_timer -= dt
+            if ghost.mode_timer <= 0.0:
+                ghost.place_at_home()
+                if state.frightened_remaining > 0.0:
+                    ghost.mode = EntityMode.FRIGHTENED
+                else:
+                    ghost.mode = EntityMode.NORMAL
+                ghost.mode_timer = 0.0
+
+    entered = advance(
+        state.player, state.maze, settings.player_speed, dt
+    )
     ate_something = False
     for cell in entered:
         if cell in state.pacgums:
             state.pacgums.discard(cell)
-            state.score += scoring.pacgum
+            state.score += settings.pacgum
             events.append(GameEvent.PACGUM_EATEN)
             ate_something = True
         if cell in state.super_pacgums:
             state.super_pacgums.discard(cell)
-            state.score += scoring.super_pacgum
+            state.score += settings.super_pacgum
             events.append(GameEvent.SUPER_PACGUM_EATEN)
             ate_something = True
+            state.frightened_remaining = settings.fright_duration
+            for ghost in state.ghosts:
+                if ghost.mode is EntityMode.NORMAL:
+                    ghost.mode = EntityMode.FRIGHTENED
+            events.append(GameEvent.FRIGHT_STARTED)
+
+    for index, ghost in enumerate(state.ghosts):
+        if ghost.mode is EntityMode.EATEN:
+            continue
+        speed = settings.ghost_speed
+        if ghost.mode is EntityMode.FRIGHTENED:
+            speed = settings.frightened_speed
+        stood_still = ghost.direction is None
+        entered_cells = advance(ghost, state.maze, speed, dt)
+        if not entered_cells and not stood_still:
+            continue
+        randomness = settings.ghost_randomness[index]
+        candidates = exit_candidates(
+            state.maze, ghost.cell, ghost.direction
+        )
+        if candidates:
+            ghost.next_direction = choose_ghost_direction(
+                ghost.cell,
+                candidates,
+                state.player.cell,
+                ghost.mode is EntityMode.FRIGHTENED,
+                randomness,
+                rng,
+            )
+
+    for ghost in state.ghosts:
+        if state.lives <= 0:
+            break
+        if not is_touching(
+            state.player, ghost, settings.collision_radius
+        ):
+            continue
+        if ghost.mode is EntityMode.FRIGHTENED:
+            ghost.mode = EntityMode.EATEN
+            ghost.mode_timer = settings.respawn_delay
+            state.score += settings.ghost
+            events.append(GameEvent.GHOST_EATEN)
+        elif ghost.mode is EntityMode.NORMAL:
+            state.lives -= 1
+            events.append(GameEvent.PLAYER_CAUGHT)
+            fright_cancelled = _respawn_after_catch(state)
+            if fright_cancelled:
+                events.append(GameEvent.FRIGHT_ENDED)
+            if state.lives <= 0:
+                events.append(GameEvent.GAME_OVER)
+            break
+
     if (
         ate_something
         and not state.pacgums
