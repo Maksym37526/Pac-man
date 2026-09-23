@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pacman.maze.model import Cell, Direction, Maze
 from pacman.render.facade import Color, GraphicsFacade
-from pacman.render.fakes import Entity, EntityKind, EntityMode, GameState
+from pacman.render.fakes import Entity, EntityKind, EntityMode, RenderGameState
 from pacman.ui.state_machine import AppState, MAIN_MENU_LABELS, MainMenuPayload, _MAIN_MENU_ORDER
 
 TILE_SIZE = 400
@@ -47,6 +47,11 @@ MENU_BACKGROUND: Color = (5, 5, 20)
 MENU_TITLE_Y = 40
 MENU_ITEM_START_Y = 140
 MENU_ITEM_SPACING = 50
+
+PACGUM_COLOR: Color = (255, 200, 150)
+PACGUM_RADIUS = 1
+SUPER_PACGUM_COLOR: Color = (255, 200, 150)
+SUPER_PACGUM_RADIUS = 4
 
 
 def maze_window_size(maze_width_cells: int, maze_height_cells: int) -> tuple[int, int]:
@@ -134,7 +139,7 @@ class Renderer:
 
         self._background = buffer
 
-    def draw_game(self, state: GameState) -> None:
+    def draw_game(self, state: RenderGameState) -> None:
         """Blit the cached background, then dynamic entities and the HUD.
 
         Args:
@@ -146,31 +151,27 @@ class Renderer:
         frame = self._facade.new_buffer(self._window_width, self._window_height)
         self._facade.blit(self._background, (0, 0), dest=frame)
 
-        self._draw_entity(frame, state.player, PLAYER_COLOR)
+        self._draw_entity(frame, state.core.player, PLAYER_COLOR)
         for ghost in state.ghosts:
             self._draw_entity(frame, ghost, self._ghost_color(ghost))
 
         self._draw_hud(frame, state)
 
-        self._facade.blit(frame, (0, 0))  # frame -> window
+        self._facade.blit(frame, (0, 0))
 
-    def _draw_hud(self, buffer: object, state: GameState) -> None:
-        """Draw the HUD strip: score, lives, level, remaining time.
-
-        Occupies the bottom HUD_HEIGHT pixels, below the maze area.
-        Filled pixel by pixel, not via clear(), which would wipe the
-        whole buffer including the maze drawn above it.
-        """
+    def _draw_hud(self, buffer: object, state: RenderGameState) -> None:
+        """Draw the HUD strip: score, lives, level, remaining time."""
         hud_top = self._window_height - HUD_HEIGHT
         for y in range(hud_top, self._window_height):
             for x in range(self._window_width):
                 self._facade.put_pixel(buffer, x, y, HUD_BACKGROUND)
         text = (
-            f"Score: {state.score}  Lives: {state.lives}  "
+            f"Score: {state.core.score}  Lives: {state.lives}  "
             f"Level: {state.level_index + 1}/{state.level_count}  "
             f"Time: {int(state.time_remaining)}"
         )
         self._facade.draw_text(buffer, text, (4, hud_top + 4), HUD_TEXT_COLOR)
+
 
     def _ghost_color(self, ghost: Entity) -> Color:
         """Pick a ghost's colour based on its mode and identity."""

@@ -1,131 +1,82 @@
-"""Temporary stand-ins for GameState and Entity from module_contracts.md.
+"""Temporary stand-in for the full GameState the renderer needs.
 
-These live in render/, not core/, because GameState and Entity are
-owned by workstream A (core/systems) per the contract's ownership
-table. This module exists only so B (render/UI) is not blocked while
-core/ is still empty. Delete this module once the real types land in
-pacman.core and repoint imports there.
+Entity, EntityKind and EntityMode come from pacman.core.entity.
+
+core.state.GameState itself is still incomplete (Phase 5 slice: no
+ghosts, lives, level tracking, or timers — see pacman/core/state.py).
+RenderGameState wraps the real GameState (the single object tick()
+mutates) instead of duplicating its fields, and adds only what core
+doesn't carry yet. Once core.state.GameState grows those fields
+(ghosts in Phase 6, lives/level/timer later), delete this wrapper and
+have the renderer consume core.state.GameState directly.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from enum import Enum, auto
+from dataclasses import dataclass, field
 
-from pacman.maze.model import Cell, Direction, Maze
+from pacman.core.entity import Entity, EntityKind, EntityMode
+from pacman.core.state import GameState as CoreGameState, new_game_state
+from pacman.maze.layout import MazeLayout
+from pacman.maze.model import Direction, Maze
 
-
-class EntityMode(Enum):
-    """Behavioural state of a moving entity."""
-    NORMAL = auto()
-    FRIGHTENED = auto()
-    EATEN = auto()
-    RESPAWNING = auto()
+__all__ = ["Entity", "EntityKind", "EntityMode", "RenderGameState", "tiny_game_state"]
 
 
-class EntityKind(Enum):
-    """Which entity this is, for sprite selection."""
-    PLAYER = auto()
-    GHOST_1 = auto()
-    GHOST_2 = auto()
-    GHOST_3 = auto()
-    GHOST_4 = auto()
-
-
-@dataclass(frozen=True)
-class Entity:
-    """A moving entity's renderable state.
-
-    The renderer computes the world position by interpolating between
-    ``prev_cell`` and ``cell`` using ``progress``, then converts to
-    screen coordinates. It needs nothing else from this type.
+@dataclass
+class RenderGameState:
+    """Extends core.state.GameState with fields core doesn't track yet.
 
     Attributes:
-        kind: Which entity this is.
-        cell: The cell this entity is moving towards (or occupies, if progress is 0).
-        prev_cell: The cell this entity is moving away from.
-        direction: Current facing/movement direction.
-        progress: Fraction travelled from prev_cell to cell, 0.0 to 1.0.
-        mode: Current behavioural state.
+        core: The real state — the single object tick() mutates.
+            maze/player/pacgums/super_pacgums/score are read through
+            this, never duplicated here.
+        ghosts: Ghost entities. Empty until core Phase 6 lands them.
+        lives: Remaining lives. Not tracked by core yet.
+        level_index: 0-based. Not tracked by core yet.
+        level_count: Total levels. Not tracked by core yet.
+        time_remaining: Seconds left on this level. Not tracked by core yet.
+        frightened_remaining: Seconds of edible state left. Not tracked by core yet.
     """
-    kind: EntityKind
-    cell: Cell
-    prev_cell: Cell
-    direction: Direction
-    progress: float
-    mode: EntityMode
+    core: CoreGameState
+    ghosts: list[Entity] = field(default_factory=list)
+    lives: int = 3
+    level_index: int = 0
+    level_count: int = 1
+    time_remaining: float = 90.0
+    frightened_remaining: float = 0.0
 
 
-@dataclass(frozen=True)
-class GameState:
-    """The single object the renderer reads. The renderer never mutates it.
+def tiny_game_state(maze: Maze) -> RenderGameState:
+    """A minimal RenderGameState for manual/smoke testing draw_game.
 
-    Attributes:
-        maze: Current level's maze.
-        player: The player entity.
-        ghosts: Exactly 4 ghost entities.
-        pacgums: Remaining ordinary pacgums.
-        super_pacgums: Remaining power pellets.
-        score: Never decreases.
-        lives: Remaining lives.
-        level_index: 0-based; the HUD displays level_index + 1.
-        level_count: Total number of levels.
-        time_remaining: Seconds left on this level, pause-compensated.
-        frightened_remaining: Seconds left of the edible state; 0.0 when inactive.
-    """
-    maze: Maze
-    player: Entity
-    ghosts: list[Entity]
-    pacgums: set[Cell]
-    super_pacgums: set[Cell]
-    score: int
-    lives: int
-    level_index: int
-    level_count: int
-    time_remaining: float
-    frightened_remaining: float
-
-
-def tiny_game_state(maze: Maze) -> GameState:
-    """A minimal GameState for manual/smoke testing draw_game.
+    Builds a real core.state.GameState via new_game_state, so the
+    same object that tick() would mutate is what the renderer reads.
+    The layout is built directly, not via gen_layout, since the test
+    doesn't need randomised pacgum placement — every remaining
+    walkable cell becomes a pacgum, deterministically.
 
     Args:
-        maze: The maze this state is built around; the player and
-            ghosts are placed at its centre and corners.
+        maze: The maze this state is built around.
 
     Returns:
-        A GameState with no pacgums eaten yet, mid-game score/lives.
+        A RenderGameState with no pacgums eaten yet.
     """
-    player = Entity(
-        kind=EntityKind.PLAYER,
-        cell=maze.centre,
-        prev_cell=maze.centre,
-        direction=Direction.RIGHT,
-        progress=0.0,
-        mode=EntityMode.NORMAL,
+    super_pacgums = frozenset(maze.corners)
+    excluded = {maze.centre} | super_pacgums
+    layout = MazeLayout(
+        player_start=maze.centre,
+        ghost_starts=maze.corners,
+        super_pacgums=super_pacgums,
+        pacgums=frozenset(maze.walkable_cells - excluded),
     )
+    core_state = new_game_state(maze, layout)
+
     ghost_kinds = (EntityKind.GHOST_1, EntityKind.GHOST_2, EntityKind.GHOST_3, EntityKind.GHOST_4)
-    ghosts = [
-        Entity(
-            kind=kind,
-            cell=corner,
-            prev_cell=corner,
-            direction=Direction.UP,
-            progress=0.0,
-            mode=EntityMode.NORMAL,
-        )
-        for kind, corner in zip(ghost_kinds, maze.corners)
-    ]
-    return GameState(
-        maze=maze,
-        player=player,
-        ghosts=ghosts,
-        pacgums=maze.walkable_cells - {maze.centre},
-        super_pacgums=set(maze.corners),
-        score=0,
-        lives=3,
-        level_index=0,
-        level_count=1,
-        time_remaining=90.0,
-        frightened_remaining=0.0,
-    )
+    ghosts = []
+    for kind, corner in zip(ghost_kinds, layout.ghost_starts):
+        ghost = Entity.standing_at(kind, corner)
+        ghost.direction = Direction.UP
+        ghosts.append(ghost)
+
+    return RenderGameState(core=core_state, ghosts=ghosts)
