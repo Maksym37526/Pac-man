@@ -23,19 +23,18 @@ class GraphicsFacade:
     ``render/`` and ``ui/`` talks to pygame only through this class.
     """
 
-    def __init__(self, width: int, height: int, title: str = "Pac-Man", font_size: int = 32) -> None:
-        """Initialise pygame and open the window.
-
-        Args:
-            width: Window width in pixels.
-            height: Window height in pixels.
-            title: Text shown in the window's title bar.
-            font_size: Point size for the text drawn via draw_text.
-        """
+    def __init__(self, width: int, height: int, title: str = "Pac-Man", font_size: int = 64) -> None:
         pygame.init()
         self._screen: pygame.Surface = pygame.display.set_mode((width, height))
         pygame.display.set_caption(title)
         self._font: pygame.font.Font = pygame.font.SysFont(None, font_size)
+        self._image_cache: dict[Path, pygame.Surface] = {}
+
+    def load_image(self, path: Path) -> pygame.Surface:
+        """Load a PNG file from disk into a buffer, caching by path."""
+        if path not in self._image_cache:
+            self._image_cache[path] = pygame.image.load(path).convert_alpha()
+        return self._image_cache[path]
 
     def close(self) -> None:
         """Shut down pygame. Safe to call more than once."""

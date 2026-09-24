@@ -12,7 +12,25 @@ from pacman.render.facade import Color, GraphicsFacade
 from pacman.render.fakes import Entity, EntityKind, EntityMode, RenderGameState
 from pacman.ui.cheats import CHEAT_LABELS
 from pacman.data.config import Config
-from pacman.ui.state_machine import AppState, HighscoresPayload, MAIN_MENU_LABELS, MainMenuPayload, NameEntryPayload, VictoryPayload, _MAIN_MENU_ORDER
+from pacman.ui.state_machine import AppState, HighscoresPayload, MAIN_MENU_LABELS, MainMenuPayload, NameEntryPayload, VictoryPayload, _MAIN_MENU_ORDER, GameOverPayload
+
+from pathlib import Path
+from pacman.core.entity import GHOST_KINDS
+from pacman.log import get_logger
+
+ASSET_DIR = Path(__file__).resolve().parents[2] / "assets"
+
+SPRITE_FILES: dict[str, str] = {
+    "player": "pacman.png",
+    "pacgum": "pacgum.png",
+    "super_pacgum": "super_pacgum.png",
+    "ghost_frightened": "ghost_frightened.png",
+}
+
+logger = get_logger(__name__)
+
+GAME_OVER_TITLE_COLOR: Color = (220, 40, 40)
+GAME_OVER_BACKGROUND: Color = (20, 5, 5)
 
 SCREEN_BACKGROUND: Color = (10, 10, 30)
 SCREEN_TITLE_COLOR: Color = (255, 220, 0)
@@ -136,6 +154,7 @@ class Renderer:
         self._background: object | None = None
         self._offset_x = 0
         self._offset_y = 0
+        self._sprite_cache: dict[str, object | None] = {}
 
     def cell_to_screen(self, cell: Cell, progress_x: float = 0.0, progress_y: float = 0.0) -> tuple[int, int]:
         """Convert a maze cell to top-left pixel coordinates in the window.
@@ -194,25 +213,30 @@ class Renderer:
         self._facade.blit(self._background, (0, 0), dest=frame)
 
         for cell in state.core.pacgums:
-            self._draw_dot(frame, cell, PACGUM_RADIUS, PACGUM_COLOR)
+            self._draw_dot(frame, cell, PACGUM_RADIUS, PACGUM_COLOR, "pacgum")
         for cell in state.core.super_pacgums:
-            self._draw_dot(frame, cell, SUPER_PACGUM_RADIUS, SUPER_PACGUM_COLOR)
+            self._draw_dot(frame, cell, SUPER_PACGUM_RADIUS, SUPER_PACGUM_COLOR, "super_pacgum")
 
-        self._draw_entity(frame, state.core.player, PLAYER_COLOR)
-        for ghost in state.ghosts:
-            self._draw_entity(frame, ghost, self._ghost_color(ghost))
+        self._draw_entity(frame, state.core.player, PLAYER_COLOR, "player")
+        for ghost in state.core.ghosts:
+            self._draw_entity(frame, ghost, self._ghost_color(ghost), self._ghost_sprite_key(ghost))
 
         self._draw_hud(frame, state)
 
         self._facade.blit(frame, (0, 0))
 
-    def _draw_dot(self, buffer: object, cell: Cell, radius: int, color: Color) -> None:
-        """Draw a small filled square centred in a tile, pixel by pixel."""
+    def _draw_dot(self, buffer: object, cell: Cell, radius: int, color: Color, sprite_key: str) -> None:
+        """Draw a pacgum: blit its sprite if available, else a small square."""
         origin_x, origin_y = self.cell_to_screen(cell)
+        sprite = self._sprite(sprite_key)
+        if sprite is not None:
+            self._facade.blit(sprite, (origin_x, origin_y), dest=buffer)
+            return
         center_x, center_y = origin_x + TILE_SIZE // 2, origin_y + TILE_SIZE // 2
         for dy in range(-radius, radius + 1):
             for dx in range(-radius, radius + 1):
                 self._facade.put_pixel(buffer, center_x + dx, center_y + dy, color)
+
 
     def _draw_hud(self, buffer: object, state: RenderGameState) -> None:
         """Draw the HUD strip: score, lives, level, remaining time, active cheats."""
@@ -221,7 +245,7 @@ class Renderer:
             for x in range(self._window_width):
                 self._facade.put_pixel(buffer, x, y, HUD_BACKGROUND)
         text = (
-            f"Score: {state.core.score}  Lives: {state.lives}  "
+            f"Score: {state.core.score}  Lives: {state.core.lives}  "
             f"Level: {state.level_index + 1}/{state.level_count}  "
             f"Time: {int(state.time_remaining)}"
         )
@@ -239,16 +263,21 @@ class Renderer:
             return FRIGHTENED_COLOR
         return GHOST_COLORS[ghost.kind]
 
-    def _draw_entity(self, buffer: object, entity: Entity, color: Color) -> None:
-        """Draw one entity as a filled square, interpolated between cells."""
+    def _draw_entity(self, buffer: object, entity: Entity, fallback_color: Color, sprite_key: str | None) -> None:
+        """Draw one entity: blit its sprite if available, else a filled square."""
         delta_col = entity.cell.col - entity.prev_cell.col
         delta_row = entity.cell.row - entity.prev_cell.row
         progress_x = delta_col * entity.progress
         progress_y = delta_row * entity.progress
         origin_x, origin_y = self.cell_to_screen(entity.prev_cell, progress_x, progress_y)
+
+        sprite = self._sprite(sprite_key) if sprite_key else None
+        if sprite is not None:
+            self._facade.blit(sprite, (origin_x, origin_y), dest=buffer)
+            return
         for dy in range(ENTITY_MARGIN, TILE_SIZE - ENTITY_MARGIN):
             for dx in range(ENTITY_MARGIN, TILE_SIZE - ENTITY_MARGIN):
-                self._facade.put_pixel(buffer, origin_x + dx, origin_y + dy, color)
+                self._facade.put_pixel(buffer, origin_x + dx, origin_y + dy, fallback_color)
 
     def _fill_tile(self, buffer: object, cell: Cell, color: Color) -> None:
         """Fill one tile solid, pixel by pixel."""
@@ -310,10 +339,19 @@ class Renderer:
         elif app_state is AppState.INSTRUCTIONS:
             self._facade.clear(frame, SCREEN_BACKGROUND)
             self._draw_instructions(frame)
+        elif app_state is AppState.GAME_OVER:
+            assert isinstance(payload, GameOverPayload)
+            self._facade.clear(frame, GAME_OVER_BACKGROUND)
+            self._draw_game_over(frame, payload)
         else:
             raise NotImplementedError(f"draw_screen not yet implemented for {app_state}")
 
         self._facade.blit(frame, (0, 0))
+
+    def _draw_game_over(self, buffer: object, payload: GameOverPayload) -> None:
+        self._facade.draw_text(buffer, "Game Over", (20, VICTORY_TITLE_Y), GAME_OVER_TITLE_COLOR)
+        self._facade.draw_text(buffer, f"Final Score: {payload.final_score}", (20, VICTORY_SCORE_Y), VICTORY_TEXT_COLOR)
+        self._facade.draw_text(buffer, "Enter/Esc — Continue", (20, VICTORY_HINT_Y), VICTORY_TEXT_COLOR)
 
     def _draw_name_entry(self, buffer: object, payload: NameEntryPayload) -> None:
         """Name entry: title, typed-so-far name with a cursor, hint."""
@@ -380,3 +418,24 @@ class Renderer:
         for y in range(self._window_height):
             for x in range(self._window_width):
                 self._facade.put_pixel(buffer, x, y, color)
+
+    def _sprite(self, key: str) -> object | None:
+        """Load and cache a sprite by logical key. None if missing/broken."""
+        if key not in self._sprite_cache:
+            filename = SPRITE_FILES.get(key, f"{key}.png")
+            path = ASSET_DIR / filename
+            try:
+                self._sprite_cache[key] = self._facade.load_image(path)
+            except (FileNotFoundError, Exception) as e:
+                logger.warning("Sprite '%s' not found at %s (%s) — using fallback shape", key, path, e)
+                self._sprite_cache[key] = None
+        return self._sprite_cache[key]
+
+    def _ghost_sprite_key(self, ghost: Entity) -> str | None:
+        """Which sprite key to use for a ghost, or None for EATEN (no asset)."""
+        if ghost.mode is EntityMode.EATEN:
+            return None
+        if ghost.mode is EntityMode.FRIGHTENED:
+            return "ghost_frightened"
+        index = GHOST_KINDS.index(ghost.kind) + 1
+        return f"ghost_{index}"

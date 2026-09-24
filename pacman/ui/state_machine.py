@@ -13,6 +13,10 @@ from pacman.ui.events import InputEvent, TypedChar
 MAX_NAME_LENGTH = 10  # V.5: max 10 characters, alphanumeric and spaces only
 
 
+@dataclass(frozen=True)
+class GameOverPayload:
+    """What draw_screen needs to draw the game-over screen."""
+    final_score: int
 
 @dataclass(frozen=True)
 class NameEntryPayload:
@@ -176,6 +180,12 @@ class AppStateMachine:
     def name_entry_payload(self) -> NameEntryPayload:
         """Snapshot of the name currently being typed."""
         return NameEntryPayload(name=self.name_buffer)
+    
+    def _handle_game_over(self, event: InputEvent) -> None:
+        """Confirm/back moves to NAME_ENTRY, same flow as victory."""
+        if event is InputEvent.SELECT or event is InputEvent.BACK:
+            self.name_buffer = ""
+            self.state = AppState.NAME_ENTRY
 
 @dataclass(frozen=True)
 class MainMenuPayload:
