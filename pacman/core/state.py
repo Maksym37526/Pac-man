@@ -24,6 +24,9 @@ class GameState:
         super_pacgums: Remaining super-pacgums.
         score: Current score, never decreases (REQ-101).
         lives: Remaining lives, from the config.
+        time_remaining: Seconds left on this level (REQ-103).
+        level_index: Zero-based level number; HUD shows +1.
+        level_count: Total number of levels in the run.
         frightened_remaining: Seconds of the edible state left,
             0.0 when inactive.
     """
@@ -35,11 +38,19 @@ class GameState:
     super_pacgums: set[Cell] = field(default_factory=set)
     score: int = 0
     lives: int = 3
+    time_remaining: float = 90.0
+    level_index: int = 0
+    level_count: int = 1
     frightened_remaining: float = 0.0
 
 
 def new_game_state(
-    maze: Maze, layout: MazeLayout, lives: int = 3
+    maze: Maze,
+    layout: MazeLayout,
+    lives: int = 3,
+    time_remaining: float = 90.0,
+    level_index: int = 0,
+    level_count: int = 1,
 ) -> GameState:
     """Build the starting state for one level.
 
@@ -47,6 +58,9 @@ def new_game_state(
         maze: A normalised maze.
         layout: Where everything starts on it.
         lives: Player lives, from the config.
+        time_remaining: Level time limit, from the level config.
+        level_index: Zero-based level number.
+        level_count: Total number of levels in the run.
 
     Returns:
         A state with the player at the layout start, one ghost
@@ -77,5 +91,8 @@ def new_game_state(
         super_pacgums=set(layout.super_pacgums),
         score=0,
         lives=lives,
+        time_remaining=time_remaining,
+        level_index=level_index,
+        level_count=level_count,
         frightened_remaining=0.0,
     )

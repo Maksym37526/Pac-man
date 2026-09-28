@@ -5,12 +5,13 @@ never mutates it.
 
 Step order is load-bearing:
     1. clamp dt once, at the entry
-    2. fright timer (FRIGHT_ENDED on the crossing tick only)
-    3. eaten-ghost timers (home teleport on expiry)
-    4. player move and eating (super starts fright)
-    5. ghost moves (AI picks next_direction every tick)
-    6. collisions (one life per tick at most)
-    7. victory check, as in Phase 5
+    2. level timer (TIME_UP on the crossing tick only, early out)
+    3. fright timer (FRIGHT_ENDED on the crossing tick only)
+    4. eaten-ghost timers (home teleport on expiry)
+    5. player move and eating (super starts fright)
+    6. ghost moves (AI picks next_direction every tick)
+    7. collisions (one life per tick at most)
+    8. victory check, as in Phase 5
 """
 
 from random import Random
@@ -39,7 +40,7 @@ def set_direction(state: GameState, direction: Direction) -> None:
     state.player.next_direction = direction
 
 
-def _respawn_after_catch(state: GameState) -> bool:
+def respawn_after_catch(state: GameState) -> bool:
     """Put the player and every ghost back at home, standing.
 
     Ghosts return to their corners so the player gets breathing
@@ -85,6 +86,13 @@ def tick(
     if dt <= 0.0:
         return events
     dt = min(dt, MAX_DT)
+
+    if state.time_remaining <= 0.0:
+        return events
+    state.time_remaining = max(0.0, state.time_remaining - dt)
+    if state.time_remaining <= 0.0:
+        events.append(GameEvent.TIME_UP)
+        return events
 
     if state.frightened_remaining > 0.0:
         cooled = max(0.0, state.frightened_remaining - dt)
@@ -166,7 +174,7 @@ def tick(
         elif ghost.mode is EntityMode.NORMAL:
             state.lives -= 1
             events.append(GameEvent.PLAYER_CAUGHT)
-            fright_cancelled = _respawn_after_catch(state)
+            fright_cancelled = respawn_after_catch(state)
             if fright_cancelled:
                 events.append(GameEvent.FRIGHT_ENDED)
             if state.lives <= 0:

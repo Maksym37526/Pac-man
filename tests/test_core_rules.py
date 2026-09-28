@@ -2,6 +2,8 @@
 
 from random import Random
 
+import pytest
+
 from pacman.core.entity import Entity, EntityKind
 from pacman.core.events import GameEvent
 from pacman.core.movement import MAX_DT, advance
@@ -140,3 +142,54 @@ def test_score_never_decreases(empty_state: GameState) -> None:
     assert all(
         later >= earlier for earlier, later in zip(seen, seen[1:])
     )
+
+
+def test_timer_counts_down(empty_state: GameState) -> None:
+    """The level timer loses exactly the clamped dt."""
+    state: GameState = empty_state
+    state.time_remaining = 10.0
+    tick(state, SETTINGS, Random(11), 0.1)
+    assert state.time_remaining == pytest.approx(9.9)
+
+
+def test_time_up_fires_once(empty_state: GameState) -> None:
+    """TIME_UP arrives on the crossing tick, never again."""
+    state: GameState = empty_state
+    state.time_remaining = 0.1
+    events = tick(state, SETTINGS, Random(12), 0.2)
+    assert GameEvent.TIME_UP in events
+    assert events.count(GameEvent.TIME_UP) == 1
+    again = tick(state, SETTINGS, Random(12), 0.2)
+    assert GameEvent.TIME_UP not in again
+
+
+def test_timer_never_goes_negative(
+    empty_state: GameState,
+) -> None:
+    """A long lag clamps the timer at exactly zero."""
+    state: GameState = empty_state
+    state.time_remaining = 0.1
+    tick(state, SETTINGS, Random(13), 10.0)
+    assert state.time_remaining == 0.0
+
+
+def test_lag_does_not_eat_timer(empty_state: GameState) -> None:
+    """One tick of dt=10 costs at most MAX_DT of level time."""
+    state: GameState = empty_state
+    state.time_remaining = 10.0
+    tick(state, SETTINGS, Random(14), 10.0)
+    assert state.time_remaining == pytest.approx(10.0 - MAX_DT)
+
+
+def test_no_movement_after_time_up(
+    empty_state: GameState,
+) -> None:
+    """The TIME_UP tick moves nobody and eats nothing."""
+    state: GameState = empty_state
+    state.time_remaining = 0.05
+    state.pacgums = {Cell(3, 2)}
+    set_direction(state, Direction.RIGHT)
+    events = tick(state, SETTINGS, Random(15), 0.2)
+    assert GameEvent.TIME_UP in events
+    assert GameEvent.PACGUM_EATEN not in events
+    assert Cell(3, 2) in state.pacgums
