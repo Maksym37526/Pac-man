@@ -19,7 +19,7 @@ from pacman.errors import ConfigError
 from pacman.maze.level import build_level
 from pacman.maze.model import Direction
 from pacman.render.facade import GraphicsFacade
-from pacman.render.fakes import RenderGameState
+from pacman.render.view_state import RenderGameState
 from pacman.render.renderer import Renderer, window_size_for_config
 from pacman.ui.cheats import CheatKind
 from pacman.ui.events import InputEvent, translate
