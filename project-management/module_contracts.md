@@ -177,13 +177,17 @@ reason the game can run headless.
 | `level_count` | `int` | total number of levels |
 | `time_remaining` | `float` | seconds left on this level, pause-compensated |
 | `frightened_remaining` | `float` | seconds left of the edible state; `0.0` when inactive |
-| `cheats` | `CheatState` | which cheats are currently active, for the HUD indicator |
 
 Phase 5 implements `maze`, `player`, `pacgums`, `super_pacgums`
 and `score`; Phase 6 adds `ghosts`, `lives` and
 `frightened_remaining`; Phase 7 adds `time_remaining`,
-`level_index` and `level_count`; `cheats` arrives later
-(Phase 10).
+`level_index` and `level_count`.
+
+> Earlier revisions promised a `cheats` field here. Phase 10
+> moved it to `Session` instead (decision F below): `GameState`
+> is replaced wholesale on every level transition, so toggles
+> stored in it would silently reset after each level. The HUD
+> reads `session.cheats` from the same object it already holds.
 
 ### `Entity`
 
@@ -304,6 +308,69 @@ reuses the exact ghost-death punishment (one life, everybody
 home, fright cancelled), and 90 s comfortably fits a level
 (~23 s for 42 pacgums at speed 8), so the limit punishes
 stalling without making the game unwinnable.
+
+### Cheats (Phase 10, decisions A–F)
+
+Cheats are a reviewer tool, not player features: each one
+exists to unlock a requirement unreachable in five minutes of
+honest play. The full cheat-to-requirement mapping lives in
+the matrix (REQ-098).
+
+`CheatState` (frozen) holds the toggles: `enabled` (master
+switch), `invincible`, `fast`. `CheatCommand` names the seven
+inputs: `TOGGLE_CHEATS`, `TOGGLE_INVINCIBLE`, `TOGGLE_SPEED`,
+`SKIP_LEVEL`, `CLEAR_LEVEL`, `START_FRIGHT`, `LOSE_LIFE`.
+
+What each command does:
+
+| Command | Effect | Reuses |
+|---|---|---|
+| `TOGGLE_CHEATS` | flips the master switch; raising it also raises `cheats_used` forever | — |
+| `TOGGLE_INVINCIBLE` / `TOGGLE_SPEED` | flips one toggle via `replace` | — |
+| `SKIP_LEVEL` | jumps to the next level (`GAME_WON` on the last), emitting `LEVEL_CLEARED` | `Session._on_level_cleared` |
+| `CLEAR_LEVEL` | empties both dot sets, emits `LEVEL_CLEARED`, then the same transition | `Session._on_level_cleared` |
+| `START_FRIGHT` | edible ghosts now, emits `FRIGHT_STARTED` | `rules.start_fright` |
+| `LOSE_LIFE` | −1 life, everybody home (`GAME_OVER` on the last) | `rules.respawn_after_catch` |
+
+Rules that must never surprise B:
+
+- No new event types. Toggles return `[]` (read
+  `session.cheats` for the indicator); one-shots reuse the
+  ordinary events of the path they trigger.
+- Level background rule: B rebuilds the cached background
+  (section 6, `prepare_level`) whenever `LEVEL_CLEARED` appears
+  in the returned events — no matter whether the level changed
+  through honest play, `SKIP_LEVEL` or `CLEAR_LEVEL`. That is
+  why both cheats emit it: without the signal B would keep
+  drawing the old maze under the new entities.
+- While `enabled` is off, only `TOGGLE_CHEATS` acts.
+- A finished session ignores every command, toggles
+  included: like `tick`, `apply_cheat` returns `[]` and changes
+  nothing, so `GAME_WON`/`GAME_OVER` fire exactly once.
+- Invincibility is narrow: `NORMAL` touches are ignored, but
+  `FRIGHTENED` ghosts are still edible and `TIME_UP` still
+  fires. `fast` doubles the player speed only
+  (`CHEAT_SPEED_FACTOR = 2.0`), via a replaced `GameSettings`;
+  with cheats off the very same settings object is reused.
+- `cheats_used`, once raised, never lowers. A tainted run must
+  not store its score: show the name screen anyway (REQ-110,
+  REQ-123), but skip `save_score`. The skipping itself lives
+  with B / `pac-man.py`; core only carries the flag.
+
+Boundary, same shape as movement: B translates key presses
+into `CheatCommand` and calls `session.apply_cheat(command)`.
+Core never sees a key code. Suggested binding (B owns the
+final choice; digits avoid WASD, arrows and name entry):
+
+| Key | Command |
+|---|---|
+| `1` | `TOGGLE_CHEATS` |
+| `2` | `TOGGLE_INVINCIBLE` |
+| `3` | `TOGGLE_SPEED` |
+| `4` | `SKIP_LEVEL` |
+| `5` | `CLEAR_LEVEL` |
+| `6` | `START_FRIGHT` |
+| `7` | `LOSE_LIFE` |
 
 ---
 
