@@ -310,11 +310,13 @@ class Renderer:
         self, buffer: Buffer, payload: MainMenuPayload
     ) -> None:
         """Title and the four menu entries, the selected one highlighted."""
+        step = self._layout.font_size + 12
         self._facade.draw_text(
-            buffer, "Pac-Man", (20, MENU_TITLE_Y), MENU_TITLE_COLOR
+            buffer, "Pac-Man", (20, 20), MENU_TITLE_COLOR
         )
+        start_y = 20 + self._layout.font_size + 24
         for index, item in enumerate(_MAIN_MENU_ORDER):
-            y = MENU_ITEM_START_Y + index * MENU_ITEM_SPACING
+            y = start_y + index * step
             selected = index == payload.selected_index
             color = MENU_SELECTED_COLOR if selected else MENU_ITEM_COLOR
             prefix = "> " if selected else "  "
@@ -324,34 +326,36 @@ class Renderer:
 
     def _draw_paused(self, buffer: Buffer) -> None:
         """Pause menu: title and the two options from VI.8."""
+        step = self._layout.font_size + 10
         self._facade.draw_text(
-            buffer, "Paused", (20, PAUSE_TITLE_Y), PAUSE_TITLE_COLOR
+            buffer, "Paused", (20, 20), PAUSE_TITLE_COLOR
         )
         self._facade.draw_text(
-            buffer, "P - Resume", (20, PAUSE_ITEM_START_Y), PAUSE_ITEM_COLOR
+            buffer, "P - Resume", (20, 20 + step * 2), PAUSE_ITEM_COLOR
         )
         self._facade.draw_text(
             buffer,
             "Esc - Main Menu",
-            (20, PAUSE_ITEM_START_Y + PAUSE_ITEM_SPACING),
+            (20, 20 + step * 3),
             PAUSE_ITEM_COLOR,
         )
 
     def _draw_victory(self, buffer: Buffer, payload: VictoryPayload) -> None:
         """Victory screen: title, final score, continue hint."""
+        step = self._layout.font_size + 10
         self._facade.draw_text(
-            buffer, "You Win!", (20, VICTORY_TITLE_Y), VICTORY_TITLE_COLOR
+            buffer, "You Win!", (20, 20), VICTORY_TITLE_COLOR
         )
         self._facade.draw_text(
             buffer,
             f"Final Score: {payload.final_score}",
-            (20, VICTORY_SCORE_Y),
+            (20, 20 + step * 2),
             VICTORY_TEXT_COLOR,
         )
         self._facade.draw_text(
             buffer,
             "Enter/Esc - Continue",
-            (20, VICTORY_HINT_Y),
+            (20, 20 + step * 3),
             VICTORY_TEXT_COLOR,
         )
 
@@ -359,19 +363,20 @@ class Renderer:
         self, buffer: Buffer, payload: GameOverPayload
     ) -> None:
         """Game-over screen: title, final score, continue hint."""
+        step = self._layout.font_size + 10
         self._facade.draw_text(
-            buffer, "Game Over", (20, VICTORY_TITLE_Y), GAME_OVER_TITLE_COLOR
+            buffer, "Game Over", (20, 20), GAME_OVER_TITLE_COLOR
         )
         self._facade.draw_text(
             buffer,
             f"Final Score: {payload.final_score}",
-            (20, VICTORY_SCORE_Y),
+            (20, 20 + step * 2),
             VICTORY_TEXT_COLOR,
         )
         self._facade.draw_text(
             buffer,
             "Enter/Esc - Continue",
-            (20, VICTORY_HINT_Y),
+            (20, 20 + step * 3),
             VICTORY_TEXT_COLOR,
         )
 
@@ -379,16 +384,17 @@ class Renderer:
         self, buffer: Buffer, payload: NameEntryPayload
     ) -> None:
         """Name entry: title, the name typed so far with a cursor, hint."""
+        step = self._layout.font_size + 10
         self._facade.draw_text(
-            buffer, "Enter your name:", (20, 40), SCREEN_TITLE_COLOR
+            buffer, "Enter your name:", (20, 20), SCREEN_TITLE_COLOR
         )
         self._facade.draw_text(
-            buffer, payload.name + "_", (20, 90), SCREEN_TEXT_COLOR
+            buffer, payload.name + "_", (20, 20 + step * 2), SCREEN_TEXT_COLOR
         )
         self._facade.draw_text(
             buffer,
             "Enter to confirm  Esc to skip",
-            (20, 140),
+            (20, 20 + step * 4),
             SCREEN_TEXT_COLOR,
         )
 
@@ -396,27 +402,31 @@ class Renderer:
         self, buffer: Buffer, payload: HighscoresPayload
     ) -> None:
         """Top-10 list: rank, name, score."""
+        step = self._layout.font_size + 10
+        title_y = 20
+        first_y = title_y + self._layout.font_size + 16
         self._facade.draw_text(
-            buffer, "High Scores", (20, 30), SCREEN_TITLE_COLOR
+            buffer, "High Scores", (20, title_y), SCREEN_TITLE_COLOR
         )
         if not payload.entries:
             self._facade.draw_text(
-                buffer, "(no scores yet)", (20, 70), SCREEN_TEXT_COLOR
+                buffer, "(no scores yet)", (20, first_y), SCREEN_TEXT_COLOR
             )
         for index, (name, score) in enumerate(payload.entries[:10]):
             line = f"{index + 1}. {name} - {score}"
             self._facade.draw_text(
-                buffer, line, (20, 70 + index * 24), SCREEN_TEXT_COLOR
+                buffer, line, (20, first_y + index * step), SCREEN_TEXT_COLOR
             )
         self._facade.draw_text(
             buffer,
             "Esc to return",
-            (20, self._layout.window_height - 30),
+            (20, self._layout.window_height - self._layout.font_size - 10),
             SCREEN_TEXT_COLOR,
         )
 
     def _draw_instructions(self, buffer: Buffer) -> None:
         """Static controls reference (VI.8)."""
+        step = self._layout.font_size + 10
         lines = [
             "Controls:",
             "Arrows / WASD - Move",
@@ -429,4 +439,4 @@ class Renderer:
         ]
         for index, line in enumerate(lines):
             color = SCREEN_TITLE_COLOR if index == 0 else SCREEN_TEXT_COLOR
-            self._facade.draw_text(buffer, line, (20, 30 + index * 24), color)
+            self._facade.draw_text(buffer, line, (20, 20 + index * step), color)

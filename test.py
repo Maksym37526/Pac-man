@@ -102,7 +102,26 @@ def main() -> None:
         last_time = now
 
         for event in translate(facade.poll_events()):
+            prev_state = machine.state
+            # Capture name/score BEFORE handle() clears the buffer
+            captured_name: str | None = None
+            captured_score: int = 0
+            if machine.state is AppState.NAME_ENTRY and event is InputEvent.SELECT:
+                captured_name = machine.name_buffer
+                captured_score = game_state.core.score
+
             machine.handle(event)
+
+            if prev_state is AppState.MAIN_MENU and machine.state is AppState.PLAYING:
+                # Fresh run on every START_GAME: old core has lives=0 /
+                # eaten pacgums / spent timer, so tick() would never
+                # collide again (rules.py breaks when lives <= 0).
+                # Rebuilding here also drops active cheats.
+                rng = Random(config.seed)
+                maze, game_state = build_render_state(config, level_index=0, rng=rng, carried_score=0)
+                level_prepared = False
+                continue
+
             if machine.state is AppState.PLAYING and isinstance(event, InputEvent):
                 if event in _DIRECTION_BY_INPUT:
                     set_direction(game_state.core, _DIRECTION_BY_INPUT[event])
@@ -118,20 +137,13 @@ def main() -> None:
                     else:
                         maze, game_state = build_render_state(config, next_index, rng, game_state.core.score)
                         level_prepared = False
-            elif machine.state is AppState.GAME_OVER and event is InputEvent.SELECT:
-                machine.state = AppState.NAME_ENTRY
-            elif machine.state is AppState.VICTORY and event is InputEvent.SELECT:
-                machine.state = AppState.NAME_ENTRY
             elif machine.state is AppState.NAME_ENTRY and event is InputEvent.SELECT:
-                # Save highscore
-                name = machine.name_buffer
-                score = game_state.core.score
-                highscore_entries, _ = save_score(config, highscore_entries, name, score)
-                machine.state = AppState.MAIN_MENU
-                # Reset game state for next run
-                rng = Random(config.seed)
-                maze, game_state = build_render_state(config, level_index=0, rng=rng, carried_score=0)
-                level_prepared = False
+                # This is handled by machine.handle() above, but we need to
+                # capture the name before it's cleared
+                pass
+            elif machine.state is AppState.MAIN_MENU and event is InputEvent.SELECT and captured_name is not None:
+                # Save highscore only; fresh state is built on next START_GAME.
+                highscore_entries, _ = save_score(config, highscore_entries, captured_name, captured_score)
 
         if machine.state is AppState.EXIT:
             running = False

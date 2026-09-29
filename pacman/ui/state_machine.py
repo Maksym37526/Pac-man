@@ -97,6 +97,8 @@ class AppStateMachine:
             self._handle_playing(event)
         elif self.state is AppState.PAUSED:
             self._handle_paused(event)
+        elif self.state is AppState.GAME_OVER:
+            self._handle_game_over(event)
         elif self.state is AppState.VICTORY:
             self._handle_victory(event)
         elif self.state is AppState.NAME_ENTRY:
@@ -155,22 +157,27 @@ class AppStateMachine:
         return MainMenuPayload(selected_index=self.menu_index)
 
     def _handle_name_entry(self, event: InputEvent | TypedChar) -> None:
-        """Build up to 10 alphanumeric-or-space characters, then confirm.
+        """Build up to 10 ASCII alphanumeric-or-space characters, then confirm.
 
-        CAVEAT: on SELECT this only clears the buffer and returns to
-        the main menu — there is no call into a real highscore-save
-        function yet, because we haven't seen the colleague's
-        persistence code. The name is typed and displayed correctly,
-        but nothing is actually saved to disk.
+        Matches the highscore contract (REQ-065, decision A):
+        NAME_PATTERN is [A-Za-z0-9 ]{1,10}, so anything else would
+        be normalised to "PLAYER" in save_score. Filter here so the
+        screen never shows a name the table cannot keep.
+        Saving itself happens in the composition layer (test.py)
+        which captures name_buffer before SELECT clears it.
         """
         if isinstance(event, TypedChar):
             char = event.char
-            if (char.isalnum() or char == " ") and len(self.name_buffer) < MAX_NAME_LENGTH:
+            if (
+                len(char) == 1
+                and char.isascii()
+                and (char.isalnum() or char == " ")
+                and len(self.name_buffer) < MAX_NAME_LENGTH
+            ):
                 self.name_buffer += char
         elif event is InputEvent.TEXT_BACKSPACE:
             self.name_buffer = self.name_buffer[:-1]
         elif event is InputEvent.SELECT:
-            print(f"TODO: save highscore ({self.name_buffer!r}, score) — persistence not wired yet")
             self.name_buffer = ""
             self.state = AppState.MAIN_MENU
         elif event is InputEvent.BACK:
