@@ -141,7 +141,7 @@ class GraphicsFacade:
         buffer.blit(rendered, position)
 
     def poll_events(self) -> list[RawEvent]:
-        """Return this frame's window events, translated out of pygame types."""
+        """Return this frame's window events, without pygame types."""
         events: list[RawEvent] = []
         for event in pygame.event.get():
             if event.type == pygame.QUIT:

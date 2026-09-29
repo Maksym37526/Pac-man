@@ -77,7 +77,10 @@ def _upscale(surf: pygame.Surface, factor: int) -> pygame.Surface:
     out = pygame.Surface((w * factor, h * factor), pygame.SRCALPHA)
     for y in range(h):
         for x in range(w):
-            out.fill(surf.get_at((x, y)), (x * factor, y * factor, factor, factor))
+            out.fill(
+                surf.get_at((x, y)),
+                (x * factor, y * factor, factor, factor),
+            )
     return out
 
 
@@ -96,18 +99,31 @@ def main(tile: int) -> None:
         for i in range(8):
             r, col = base_row + i // 4, i % 4
             jobs.append(
-                ("PacManAssets-Ghosts.png", BASE_PM, col, r, "full", f"ghost_{kind}_{i}.png")
+                (
+                    "PacManAssets-Ghosts.png",
+                    BASE_PM,
+                    col,
+                    r,
+                    "full",
+                    f"ghost_{kind}_{i}.png",
+                )
             )
 
     cache: dict[str, pygame.Surface] = {}
     for sheet, base, col, row, half, name in jobs:
         if sheet not in cache:
-            cache[sheet] = pygame.image.load(str(ASSETS / sheet)).convert_alpha()
+            cache[sheet] = pygame.image.load(
+                str(ASSETS / sheet)
+            ).convert_alpha()
         src = cache[sheet]
         if base == BASE_PM and tile % 2:
-            raise ValueError(f"tile {tile} breaks 32px cells (need even)")
+            raise ValueError(
+                f"tile {tile} breaks 32px cells (need even)"
+            )
         if base == BASE_DOT and tile % 16:
-            raise ValueError(f"tile {tile} breaks 16px cells (need multiple of 16)")
+            raise ValueError(
+                f"tile {tile} breaks 16px cells (need multiple of 16)"
+            )
         factor = tile // base
         h = base // 2 if half == "top" else base
         cell = pygame.Surface((base, h), pygame.SRCALPHA)

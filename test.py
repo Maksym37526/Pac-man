@@ -4,7 +4,6 @@
 """
 
 import sys
-import time
 from random import Random
 
 from pacman.core.events import GameEvent
@@ -20,6 +19,7 @@ from pacman.maze.level import build_level
 from pacman.maze.model import Direction
 from pacman.render.facade import GraphicsFacade
 from pacman.render.layout import fit_layout
+from pacman.render.timing import FrameLimiter
 from pacman.render.view_state import RenderGameState
 from pacman.render.renderer import Renderer
 from pacman.ui.cheats import CheatKind
@@ -57,9 +57,16 @@ def build_render_state(config, level_index: int, rng: Random, carried_score: int
         pacgums=level_config.pacgum, level_index=level_index,
         config_seed=config.seed, rng=rng,
     )
-    core_state = new_game_state(maze, layout, lives=config.lives)
+    core_state = new_game_state(
+        maze,
+        layout,
+        lives=config.lives,
+        time_remaining=level_config.level_max_time,
+        level_index=level_index,
+        level_count=len(config.levels),
+    )
     core_state.score = carried_score  # see CAVEAT above
-    render_state = RenderGameState(core=core_state, level_index=level_index, level_count=len(config.levels))
+    render_state = RenderGameState(core=core_state)
     return maze, render_state
 
 
@@ -87,30 +94,42 @@ def main() -> None:
     # Load highscores at startup
     highscore_entries = load_highscores(config)
 
+    # Playtest tuning (matrix open point #2): defaults (8/7/4)
+    # cells/s are twitchy on turns. Ghost stays slower than the
+    # player so the game stays winnable; confirm with A and record.
     settings = GameSettings(
         pacgum=config.points_per_pacgum,
         super_pacgum=config.points_per_super_pacgum,
         ghost=config.points_per_ghost,
+        player_speed=5.0,
+        ghost_speed=4.5,
+        frightened_speed=3.0,
     )
     level_prepared = False
-    last_time = time.monotonic()
+    limiter = FrameLimiter()
 
     running = True
     while running:
-        now = time.monotonic()
-        dt = now - last_time
-        last_time = now
+        dt = limiter.wait()
 
-        for event in translate(facade.poll_events()):
+        for event in translate(
+            facade.poll_events(),
+            name_entry=(machine.state is AppState.NAME_ENTRY),
+        ):
             prev_state = machine.state
-            # Capture name/score BEFORE handle() clears the buffer
-            captured_name: str | None = None
-            captured_score: int = 0
-            if machine.state is AppState.NAME_ENTRY and event is InputEvent.SELECT:
-                captured_name = machine.name_buffer
-                captured_score = game_state.core.score
-
             machine.handle(event)
+
+            if machine.confirmed_name is not None:
+                # Save highscore only; fresh state is built on next
+                # START_GAME. Score is still valid: the run's core
+                # is rebuilt only when a new game starts.
+                highscore_entries, _ = save_score(
+                    config,
+                    highscore_entries,
+                    machine.confirmed_name,
+                    game_state.core.score,
+                )
+                machine.confirmed_name = None
 
             if prev_state is AppState.MAIN_MENU and machine.state is AppState.PLAYING:
                 # Fresh run on every START_GAME: old core has lives=0 /
@@ -131,19 +150,12 @@ def main() -> None:
                     game_state.core.lives += 1
                 elif event is InputEvent.CHEAT_LEVEL_SKIP:
                     # Skip to next level
-                    next_index = game_state.level_index + 1
+                    next_index = game_state.core.level_index + 1
                     if next_index >= len(config.levels):
                         machine.state = AppState.VICTORY
                     else:
                         maze, game_state = build_render_state(config, next_index, rng, game_state.core.score)
                         level_prepared = False
-            elif machine.state is AppState.NAME_ENTRY and event is InputEvent.SELECT:
-                # This is handled by machine.handle() above, but we need to
-                # capture the name before it's cleared
-                pass
-            elif machine.state is AppState.MAIN_MENU and event is InputEvent.SELECT and captured_name is not None:
-                # Save highscore only; fresh state is built on next START_GAME.
-                highscore_entries, _ = save_score(config, highscore_entries, captured_name, captured_score)
 
         if machine.state is AppState.EXIT:
             running = False
@@ -169,13 +181,14 @@ def main() -> None:
             if not level_prepared:
                 renderer.prepare_level(maze)
                 level_prepared = True
+            renderer.advance(dt)
             for game_event in tick(game_state.core, settings, rng, dt):
                 print(game_event)
                 if game_event is GameEvent.GAME_OVER:
                     machine.state = AppState.GAME_OVER
                     break
                 if game_event is GameEvent.LEVEL_CLEARED:
-                    next_index = game_state.level_index + 1
+                    next_index = game_state.core.level_index + 1
                     if next_index >= len(config.levels):
                         machine.state = AppState.VICTORY
                         break

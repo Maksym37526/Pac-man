@@ -18,6 +18,7 @@ class GameOverPayload:
     """What draw_screen needs to draw the game-over screen."""
     final_score: int
 
+
 @dataclass(frozen=True)
 class NameEntryPayload:
     """What draw_screen needs to draw the name-entry screen."""
@@ -30,12 +31,9 @@ class HighscoresPayload:
 
     Attributes:
         entries: (name, score) pairs, already sorted/limited to top 10.
-            CAVEAT: not yet wired to real persistence — colleague's
-            highscore save/load code hasn't been shared/reviewed yet.
+            Filled by the composer from load_highscores/save_score.
     """
     entries: list[tuple[str, int]]
-
-
 
 
 class AppState(Enum):
@@ -79,7 +77,7 @@ class AppStateMachine:
     state: AppState = AppState.MAIN_MENU
     menu_index: int = 0
     name_buffer: str = ""
-    pending_score: int = 0
+    confirmed_name: str | None = None
 
     def handle(self, event: InputEvent | TypedChar) -> None:
         """Apply one input event, possibly changing state in place."""
@@ -141,8 +139,12 @@ class AppStateMachine:
             self.state = AppState.MAIN_MENU
 
     def _handle_playing(self, event: InputEvent) -> None:
-        """Only PAUSE is handled at this layer; movement is core's job."""
-        if event is InputEvent.PAUSE:
+        """Pause on PAUSE or BACK; movement is core's job.
+
+        Escape arrives as BACK (translate is stateless, §5), so
+        PLAYING treats it as pause-enter: P or Esc pauses.
+        """
+        if event is InputEvent.PAUSE or event is InputEvent.BACK:
             self.state = AppState.PAUSED
 
     def _handle_paused(self, event: InputEvent) -> None:
@@ -163,8 +165,9 @@ class AppStateMachine:
         NAME_PATTERN is [A-Za-z0-9 ]{1,10}, so anything else would
         be normalised to "PLAYER" in save_score. Filter here so the
         screen never shows a name the table cannot keep.
-        Saving itself happens in the composition layer (test.py)
-        which captures name_buffer before SELECT clears it.
+        On SELECT the typed name lands in confirmed_name for the
+        composer to save; on BACK confirmed_name is None (skip).
+        Either way the buffer is cleared and we return to MAIN_MENU.
         """
         if isinstance(event, TypedChar):
             char = event.char
@@ -178,21 +181,24 @@ class AppStateMachine:
         elif event is InputEvent.TEXT_BACKSPACE:
             self.name_buffer = self.name_buffer[:-1]
         elif event is InputEvent.SELECT:
+            self.confirmed_name = self.name_buffer
             self.name_buffer = ""
             self.state = AppState.MAIN_MENU
         elif event is InputEvent.BACK:
+            self.confirmed_name = None
             self.name_buffer = ""
             self.state = AppState.MAIN_MENU
 
     def name_entry_payload(self) -> NameEntryPayload:
         """Snapshot of the name currently being typed."""
         return NameEntryPayload(name=self.name_buffer)
-    
+
     def _handle_game_over(self, event: InputEvent) -> None:
         """Confirm/back moves to NAME_ENTRY, same flow as victory."""
         if event is InputEvent.SELECT or event is InputEvent.BACK:
             self.name_buffer = ""
             self.state = AppState.NAME_ENTRY
+
 
 @dataclass(frozen=True)
 class MainMenuPayload:
@@ -202,6 +208,7 @@ class MainMenuPayload:
         selected_index: Index into the menu items, for highlighting.
     """
     selected_index: int
+
 
 @dataclass(frozen=True)
 class VictoryPayload:

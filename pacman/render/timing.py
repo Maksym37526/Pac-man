@@ -7,6 +7,8 @@ and time.sleep from the standard library.
 
 import time
 
+from pacman.core.movement import MAX_DT
+
 TARGET_FPS = 60
 
 
@@ -31,11 +33,12 @@ class FrameLimiter:
         """Sleep until the frame period has passed, then return its dt.
 
         Call once at the top of every loop iteration. The returned dt
-        is measured after the sleep, so it is exactly what the game
-        should simulate for this frame.
+        is clamped to MAX_DT, so it can go straight into tick() and
+        renderer.advance(): a hitch (drag, breakpoint) never eats the
+        level timer beyond one clamped step.
 
         Returns:
-            Seconds since the previous call.
+            Clamped seconds since the previous call.
         """
         remaining = self._period - (time.monotonic() - self._last)
         if remaining > 0.0:
@@ -43,4 +46,4 @@ class FrameLimiter:
         now = time.monotonic()
         dt = now - self._last
         self._last = now
-        return dt
+        return min(dt, MAX_DT)

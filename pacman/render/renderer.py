@@ -12,11 +12,11 @@ buffer is reused for every frame.
 
 from __future__ import annotations
 
-import time
 from pathlib import Path
 
 from pacman.core.entity import GHOST_KINDS, Entity, EntityKind, EntityMode
-from pacman.maze.model import Cell, Direction, Maze
+from pacman.core.movement import MAX_DT
+from pacman.maze.model import Cell, Direction, Maze, step
 from pacman.render.facade import Buffer, Color, GraphicsFacade
 from pacman.render.layout import Layout
 from pacman.render.theme import (
@@ -42,6 +42,7 @@ from pacman.render.theme import (
     SCREEN_BACKGROUND,
     SCREEN_TEXT_COLOR,
     SCREEN_TITLE_COLOR,
+    SUPER_PACGUM_COLOR,
     VICTORY_BACKGROUND,
     VICTORY_TEXT_COLOR,
     VICTORY_TITLE_COLOR,
@@ -90,6 +91,20 @@ class Renderer:
             / f"tile{layout.tile}"
         )
         self._last_dir: dict[EntityKind, Direction] = {}
+        # Game-time clock for sprite animation. Advanced explicitly
+        # via advance(), which the main loop calls only with the same
+        # dt it feeds tick() — so pause freezes mouths and blinking
+        # together with the simulation (REQ-108/109).
+        self._anim_t: float = 0.0
+
+    def advance(self, dt: float) -> None:
+        """Move the animation clock by one simulated step.
+
+        Args:
+            dt: Seconds simulated this frame; clamped like tick().
+        """
+        if dt > 0.0:
+            self._anim_t += min(dt, MAX_DT)
 
     def cell_to_screen(
         self, cell: Cell, progress_x: float = 0.0, progress_y: float = 0.0
@@ -116,6 +131,7 @@ class Renderer:
                 cell = Cell(col, row)
                 if cell in maze.blocks:
                     self._fill_tile(buffer, cell, BLOCK_COLOR)
+                    self._draw_block_rim(buffer, cell, maze)
                     continue
                 for direction in Direction:
                     if maze.is_wall_between(cell, direction):
@@ -195,6 +211,35 @@ class Renderer:
         tile = self._layout.tile
         self._fill_rect(buffer, x, y, tile, tile, color)
 
+    def _draw_block_rim(
+        self, buffer: Buffer, cell: Cell, maze: Maze
+    ) -> None:
+        """Bright rim on block sides facing a corridor.
+
+        The TileSet has no tileable thin-wall set for generated
+        mazes (verified by scan), so the logo mass keeps vector
+        styling: sheet fill plus a neon rim where it meets play.
+        """
+        x, y = self.cell_to_screen(cell)
+        tile = self._layout.tile
+        rim = max(2, self._layout.wall // 2)
+        for direction in Direction:
+            neighbour = step(cell, direction)
+            if neighbour in maze.blocks:
+                continue
+            if direction is Direction.UP:
+                self._fill_rect(buffer, x, y, tile, rim, WALL_COLOR)
+            elif direction is Direction.DOWN:
+                self._fill_rect(
+                    buffer, x, y + tile - rim, tile, rim, WALL_COLOR
+                )
+            elif direction is Direction.LEFT:
+                self._fill_rect(buffer, x, y, rim, tile, WALL_COLOR)
+            elif direction is Direction.RIGHT:
+                self._fill_rect(
+                    buffer, x + tile - rim, y, rim, tile, WALL_COLOR
+                )
+
     def _draw_wall_edge(
         self, buffer: Buffer, cell: Cell, direction: Direction
     ) -> None:
@@ -222,31 +267,39 @@ class Renderer:
         self._sprites[name] = sprite
         return sprite
 
-    def _blit_centered(
+    def _blit_frame(
         self, buffer: Buffer, sprite: Buffer, x: int, y: int
     ) -> None:
-        """Blit a frame centred on a tile origin (no scaling ever)."""
-        tile = self._layout.tile
-        w, h = sprite.get_width(), sprite.get_height()
-        self._facade.blit(
-            sprite,
-            (x + (tile - w) // 2, y + (tile - h) // 2),
-            dest=buffer,
-        )
+        """Blit one frame at a tile origin, no scaling or queries.
+
+        Frames are authored at exactly the tile size (D2), so no
+        centering math and no size queries are needed. Eyes frames
+        are half-height by construction; callers offset them.
+        """
+        self._facade.blit(sprite, (x, y), dest=buffer)
 
     def _draw_pickup(self, buffer: Buffer, cell: Cell, name: str) -> None:
-        """Draw a pacgum sprite, falling back to a square."""
+        """Draw a pacgum sprite, falling back to a distinct square."""
         sprite = self._sprite(name)
         x, y = self.cell_to_screen(cell)
         if sprite is None:
+            if name == "dot_big":
+                radius, color = (
+                    self._layout.super_radius,
+                    SUPER_PACGUM_COLOR,
+                )
+            else:
+                radius, color = (
+                    self._layout.pacgum_radius,
+                    PACGUM_COLOR,
+                )
             half = self._layout.tile // 2
-            radius = self._layout.pacgum_radius
             self._fill_rect(
                 buffer, x + half - radius, y + half - radius,
-                radius * 2 + 1, radius * 2 + 1, PACGUM_COLOR,
+                radius * 2 + 1, radius * 2 + 1, color,
             )
             return
-        self._blit_centered(buffer, sprite, x, y)
+        self._blit_frame(buffer, sprite, x, y)
 
     def _entity_xy(self, entity: Entity) -> tuple[int, int]:
         """Interpolated top-left pixel of an entity's tile."""
@@ -268,7 +321,7 @@ class Renderer:
     def _draw_player(self, buffer: Buffer, player: Entity) -> None:
         """Animated Pac-Man: mouth faces travel direction."""
         facing = self._facing(player)
-        phase = int(time.monotonic() * 8) % 4
+        phase = int(self._anim_t * 8) % 4
         if facing is Direction.LEFT:
             names = ["pm_left_0", "pm_left_1", "pm_left_2", "pm_right_3"]
         elif facing in (Direction.UP, Direction.DOWN):
@@ -285,7 +338,7 @@ class Renderer:
                 size, size, PLAYER_COLOR,
             )
             return
-        self._blit_centered(buffer, sprite, x, y)
+        self._blit_frame(buffer, sprite, x, y)
 
     def _draw_ghost(
         self, buffer: Buffer, ghost: Entity, frightened_remaining: float
@@ -295,7 +348,7 @@ class Renderer:
             kind_index = GHOST_KINDS.index(ghost.kind)
         except ValueError:
             kind_index = 0
-        phase = int(time.monotonic() * 8) % 8
+        phase = int(self._anim_t * 8) % 8
         x, y = self._entity_xy(ghost)
         if ghost.mode is EntityMode.EATEN:
             eye = self._EYE_BY_DIR.get(self._facing(ghost), 1)
@@ -303,28 +356,28 @@ class Renderer:
             if eyes is None:
                 self._fill_square(buffer, x, y, EATEN_COLOR)
                 return
-            self._blit_centered(buffer, eyes, x, y)
+            self._blit_frame(buffer, eyes, x, y + self._layout.tile // 4)
             return
         if ghost.mode is EntityMode.FRIGHTENED:
-            if frightened_remaining < 2.0 and int(time.monotonic() * 4) % 2:
+            if frightened_remaining < 2.0 and int(self._anim_t * 4) % 2:
                 names = ["ghost_blink_0", "ghost_blink_1"]
             else:
                 names = ["ghost_fright_0", "ghost_fright_1"]
-            sprite = self._sprite(names[int(time.monotonic() * 8) % 2])
+            sprite = self._sprite(names[int(self._anim_t * 8) % 2])
             if sprite is None:
                 self._fill_square(buffer, x, y, FRIGHTENED_COLOR)
                 return
-            self._blit_centered(buffer, sprite, x, y)
+            self._blit_frame(buffer, sprite, x, y)
             return
         sprite = self._sprite(f"ghost_{kind_index}_{phase}")
         if sprite is None:
             self._fill_square(buffer, x, y, self._ghost_color(ghost))
             return
-        self._blit_centered(buffer, sprite, x, y)
+        self._blit_frame(buffer, sprite, x, y)
         eye = self._EYE_BY_DIR.get(self._facing(ghost), 1)
         eyes = self._sprite(f"eyes_{eye}")
         if eyes is not None:
-            self._blit_centered(buffer, eyes, x, y)
+            self._blit_frame(buffer, eyes, x, y + self._layout.tile // 4)
 
     _EYE_BY_DIR: dict[Direction | None, int] = {
         Direction.LEFT: 0,
@@ -355,7 +408,7 @@ class Renderer:
         layout = self._layout
         text = (
             f"Score: {state.core.score}  Lives: {state.core.lives}  "
-            f"Level: {state.level_index + 1}/{state.level_count}  "
+            f"Level: {state.core.level_index + 1}/{state.core.level_count}  "
             f"Time: {int(state.core.time_remaining)}"
         )
         self._facade.draw_text(
@@ -375,41 +428,59 @@ class Renderer:
     def draw_screen(self, app_state: AppState, payload: object) -> None:
         """Draw a non-gameplay screen.
 
+        Never raises on bad input (REQ-003): wrong payload types
+        raise TypeError explicitly (asserts vanish under python -O),
+        and PLAYING/EXIT are harmless no-ops (draw_game owns PLAYING).
+
         Args:
             app_state: Which screen to draw.
             payload: Screen-specific data.
         """
         frame = self._frame
         if app_state is AppState.MAIN_MENU:
-            assert isinstance(payload, MainMenuPayload)
+            if not isinstance(payload, MainMenuPayload):
+                raise TypeError(
+                    f"MAIN_MENU needs MainMenuPayload, got {type(payload)}"
+                )
             self._facade.clear(frame, MENU_BACKGROUND)
             self._draw_main_menu(frame, payload)
         elif app_state is AppState.PAUSED:
             self._facade.clear(frame, PAUSE_BACKGROUND)
             self._draw_paused(frame)
         elif app_state is AppState.VICTORY:
-            assert isinstance(payload, VictoryPayload)
+            if not isinstance(payload, VictoryPayload):
+                raise TypeError(
+                    f"VICTORY needs VictoryPayload, got {type(payload)}"
+                )
             self._facade.clear(frame, VICTORY_BACKGROUND)
             self._draw_victory(frame, payload)
         elif app_state is AppState.GAME_OVER:
-            assert isinstance(payload, GameOverPayload)
+            if not isinstance(payload, GameOverPayload):
+                raise TypeError(
+                    f"GAME_OVER needs GameOverPayload, got {type(payload)}"
+                )
             self._facade.clear(frame, GAME_OVER_BACKGROUND)
             self._draw_game_over(frame, payload)
         elif app_state is AppState.NAME_ENTRY:
-            assert isinstance(payload, NameEntryPayload)
+            if not isinstance(payload, NameEntryPayload):
+                raise TypeError(
+                    f"NAME_ENTRY needs NameEntryPayload, got {type(payload)}"
+                )
             self._facade.clear(frame, SCREEN_BACKGROUND)
             self._draw_name_entry(frame, payload)
         elif app_state is AppState.HIGHSCORES:
-            assert isinstance(payload, HighscoresPayload)
+            if not isinstance(payload, HighscoresPayload):
+                raise TypeError(
+                    "HIGHSCORES needs HighscoresPayload, "
+                    f"got {type(payload)}"
+                )
             self._facade.clear(frame, SCREEN_BACKGROUND)
             self._draw_highscores(frame, payload)
         elif app_state is AppState.INSTRUCTIONS:
             self._facade.clear(frame, SCREEN_BACKGROUND)
             self._draw_instructions(frame)
         else:
-            raise NotImplementedError(
-                f"draw_screen not yet implemented for {app_state}"
-            )
+            return
         self._facade.blit(frame, (0, 0))
 
     def _draw_main_menu(

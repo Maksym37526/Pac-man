@@ -9,10 +9,10 @@ split out and centred (refactor step 4).
 from pacman.core.entity import EntityKind
 from pacman.render.facade import Color
 
-# Maze
+# Maze (palette sampled from PacManAssets_Map_TileSet.png)
 FLOOR_COLOR: Color = (10, 10, 30)
-WALL_COLOR: Color = (40, 80, 220)
-BLOCK_COLOR: Color = (0, 0, 0)
+WALL_COLOR: Color = (77, 166, 255)
+BLOCK_COLOR: Color = (75, 91, 171)
 
 # Entities and pickups
 PLAYER_COLOR: Color = (255, 220, 0)
@@ -25,7 +25,8 @@ GHOST_COLORS: dict[EntityKind, Color] = {
 FRIGHTENED_COLOR: Color = (30, 30, 220)
 EATEN_COLOR: Color = (120, 120, 120)
 PACGUM_COLOR: Color = (255, 200, 150)
-SUPER_PACGUM_COLOR: Color = (255, 200, 150)
+SUPER_PACGUM_COLOR: Color = (255, 240, 210)
+"""Fallback-only super-pacgum tint, lighter than PACGUM_COLOR."""
 
 # HUD
 HUD_BACKGROUND: Color = (0, 0, 0)
