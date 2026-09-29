@@ -65,11 +65,28 @@ def respawn_after_catch(state: GameState) -> bool:
     return was_frightened
 
 
+def start_fright(state: GameState, duration: float) -> None:
+    """Turn every hunting ghost edible for a duration.
+
+    Shared by the super-pacgum branch of tick and the
+    START_FRIGHT cheat: one implementation, two callers.
+
+    Args:
+        state: The game state, mutated in place.
+        duration: Seconds ghosts stay edible.
+    """
+    state.frightened_remaining = duration
+    for ghost in state.ghosts:
+        if ghost.mode is EntityMode.NORMAL:
+            ghost.mode = EntityMode.FRIGHTENED
+
+
 def tick(
     state: GameState,
     settings: GameSettings,
     rng: Random,
     dt: float,
+    invincible: bool = False,
 ) -> list[GameEvent]:
     """Advance the game by dt seconds.
 
@@ -78,6 +95,9 @@ def tick(
         settings: Static tuning (speeds, points, durations).
         rng: The run's random source for ghost turns.
         dt: Seconds since the last tick, clamped to MAX_DT.
+        invincible: Cheat shield against NORMAL ghosts. Eating
+            frightened ghosts and the level timer work as
+            always: the shield is narrow, never "turn all off".
 
     Returns:
         Events that happened during this tick, in order.
@@ -129,10 +149,7 @@ def tick(
             state.score += settings.super_pacgum
             events.append(GameEvent.SUPER_PACGUM_EATEN)
             ate_something = True
-            state.frightened_remaining = settings.fright_duration
-            for ghost in state.ghosts:
-                if ghost.mode is EntityMode.NORMAL:
-                    ghost.mode = EntityMode.FRIGHTENED
+            start_fright(state, settings.fright_duration)
             events.append(GameEvent.FRIGHT_STARTED)
 
     for index, ghost in enumerate(state.ghosts):
@@ -171,7 +188,7 @@ def tick(
             ghost.mode_timer = settings.respawn_delay
             state.score += settings.ghost
             events.append(GameEvent.GHOST_EATEN)
-        elif ghost.mode is EntityMode.NORMAL:
+        elif ghost.mode is EntityMode.NORMAL and not invincible:
             state.lives -= 1
             events.append(GameEvent.PLAYER_CAUGHT)
             fright_cancelled = respawn_after_catch(state)

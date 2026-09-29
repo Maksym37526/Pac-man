@@ -20,12 +20,18 @@ tick, so no dt reaches the level timer. Core never reads a
 system clock, only the dt it is given.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from random import Random
 
+from pacman.core.cheats import (
+    CheatCommand,
+    CheatState,
+    effective_settings,
+)
 from pacman.core.events import GameEvent
 from pacman.core.rules import respawn_after_catch
 from pacman.core.rules import set_direction as rules_set_direction
+from pacman.core.rules import start_fright
 from pacman.core.rules import tick as rules_tick
 from pacman.core.settings import GameSettings
 from pacman.core.state import GameState, new_game_state
@@ -59,6 +65,10 @@ class Session:
         config_seed: Top-level seed, deciding each maze.
         finished: True after GAME_OVER or GAME_WON.
         won: True only after GAME_WON.
+        cheats: Current cheat toggles, for the HUD indicator.
+        cheats_used: Whether cheats were ever enabled in this
+            run. Raised once, never lowered: a tainted run
+            must not store its score.
     """
 
     level: GameState
@@ -68,6 +78,8 @@ class Session:
     config_seed: int
     finished: bool = False
     won: bool = False
+    cheats: CheatState = CheatState()
+    cheats_used: bool = False
 
     def set_direction(self, direction: Direction) -> None:
         """Store the player's desired turn for the level.
@@ -76,6 +88,81 @@ class Session:
             direction: The desired travel direction.
         """
         rules_set_direction(self.level, direction)
+
+    def apply_cheat(
+        self, command: CheatCommand
+    ) -> list[GameEvent]:
+        """Run one reviewer command.
+
+        No new event types: toggles return an empty list (B
+        reads session.cheats for the indicator), one-shot
+        commands reuse the ordinary events of the path they
+        trigger. While the master switch is off, only
+        TOGGLE_CHEATS acts; everything else is ignored. A
+        finished session ignores every command, toggles
+        included: events fire exactly once, like in tick.
+
+        Both SKIP_LEVEL and CLEAR_LEVEL emit LEVEL_CLEARED, so
+        B rebuilds the level background on that event no matter
+        which path changed the level. They differ only in setup:
+        CLEAR_LEVEL empties the dots first (demonstrating the
+        honest win condition), SKIP_LEVEL just jumps.
+
+        Args:
+            command: Which cheat to run.
+
+        Returns:
+            Events the command produced, in order.
+        """
+        if self.finished:
+            return []
+        if (
+            command is not CheatCommand.TOGGLE_CHEATS
+            and not self.cheats.enabled
+        ):
+            return []
+        if command is CheatCommand.TOGGLE_CHEATS:
+            on = not self.cheats.enabled
+            self.cheats = replace(self.cheats, enabled=on)
+            if on:
+                self.cheats_used = True
+            return []
+        if command is CheatCommand.TOGGLE_INVINCIBLE:
+            self.cheats = replace(
+                self.cheats, invincible=not self.cheats.invincible
+            )
+            return []
+        if command is CheatCommand.TOGGLE_SPEED:
+            self.cheats = replace(
+                self.cheats, fast=not self.cheats.fast
+            )
+            return []
+        if command is CheatCommand.SKIP_LEVEL:
+            events = [GameEvent.LEVEL_CLEARED]
+            self._on_level_cleared(events)
+            return events
+        if command is CheatCommand.CLEAR_LEVEL:
+            self.level.pacgums.clear()
+            self.level.super_pacgums.clear()
+            events = [GameEvent.LEVEL_CLEARED]
+            self._on_level_cleared(events)
+            return events
+        if command is CheatCommand.START_FRIGHT:
+            start_fright(
+                self.level, self.settings.fright_duration
+            )
+            return [GameEvent.FRIGHT_STARTED]
+        if command is CheatCommand.LOSE_LIFE:
+            events = [GameEvent.PLAYER_CAUGHT]
+            self.level.lives -= 1
+            fright_cancelled = respawn_after_catch(self.level)
+            if fright_cancelled:
+                events.append(GameEvent.FRIGHT_ENDED)
+            if self.level.lives <= 0:
+                events.append(GameEvent.GAME_OVER)
+                self.finished = True
+            return events
+        return []
 
     def tick(self, dt: float) -> list[GameEvent]:
         """Advance the run by dt seconds.
@@ -94,7 +181,11 @@ class Session:
         """
         if self.finished:
             return []
-        events = rules_tick(self.level, self.settings, self.rng, dt)
+        active = effective_settings(self.settings, self.cheats)
+        shielded = self.cheats.enabled and self.cheats.invincible
+        events = rules_tick(
+            self.level, active, self.rng, dt, invincible=shielded
+        )
         if GameEvent.TIME_UP in events:
             self._on_time_up(events)
             return events
