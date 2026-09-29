@@ -181,8 +181,9 @@ reason the game can run headless.
 
 Phase 5 implements `maze`, `player`, `pacgums`, `super_pacgums`
 and `score`; Phase 6 adds `ghosts`, `lives` and
-`frightened_remaining`; `level_index`, `level_count`,
-`time_remaining` and `cheats` arrive in Phase 7.
+`frightened_remaining`; Phase 7 adds `time_remaining`,
+`level_index` and `level_count`; `cheats` arrives later
+(Phase 10).
 
 ### `Entity`
 
@@ -232,9 +233,11 @@ the HUD. Phases 6 and 7 extend the enum, they never reinterpret it.
 | `LEVEL_CLEARED` | the tick that eats the last remaining dot (ordinary and super sets both empty); exactly once, never repeated on later ticks |
 | `GHOST_EATEN` | the player touches a `FRIGHTENED` ghost: +Z, ghost becomes `EATEN` |
 | `PLAYER_CAUGHT` | the player touches a `NORMAL` ghost: −1 life, player and ghosts respawn at home |
-| `GAME_OVER` | the tick that takes the last life; Phase 7 reacts to it |
+| `GAME_OVER` | the tick that takes the last life (by catch or by time-up); the session is finished, later ticks emit nothing |
 | `FRIGHT_STARTED` | a super-pacgum turns every `NORMAL` ghost `FRIGHTENED` (timer resets, never stacks) |
 | `FRIGHT_ENDED` | the fright timer crosses zero, or death cancels an active fright; exactly once per fright — paired events are always paired, including cancellation paths |
+| `TIME_UP` | the level timer crosses zero; fires once, on the crossing tick only, with no movement or eating in that tick |
+| `GAME_WON` | the cleared level is the last one in the run; the session is finished, later ticks emit nothing |
 
 ### `GameSettings`
 
@@ -251,6 +254,56 @@ catchable), `fright_duration`, `respawn_delay` (both 7.0 s),
 Note for B: `FRIGHTENED` and `EATEN` need distinct sprites (VI.3:
 the player must see who is edible), and `frightened_remaining` is
 available for the end-of-fright blink.
+
+### `Session` (Phase 7)
+
+One full run through every level. The renderer keeps reading a
+single `GameState` (`session.level`); nothing about `draw_game`
+changes. What changes is who B drives and where run-wide data
+lives.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `level` | `GameState` | current level's state; replaced wholesale on every transition |
+| `settings` | `GameSettings` | static tuning, shared by all levels |
+| `rng` | `Random` | the run's random source, shared by all levels |
+| `levels` | tuple of `LevelSpec` | every level's shape, in play order; core's own record (`width`, `height`, `pacgums`, `level_max_time`), translated from `LevelConfig` by the composition layer |
+| `config_seed` | `int` | top-level seed, deciding each maze |
+| `finished` | `bool` | true after `GAME_OVER` or `GAME_WON`; ticks on a finished session return `[]` |
+| `won` | `bool` | true only after `GAME_WON` |
+
+Decision A (why it looks like this): `score` and `lives` stay
+in `GameState`, so `rules.tick(state, settings, rng, dt)` keeps
+its signature and every Phase 5/6 test keeps working. On a
+transition the session copies exactly those two fields into the
+fresh state; dedicated tests guard the copy. The alternative —
+moving them into `Session` — would have rewritten the tick
+signature and the whole core test suite for no behavioural gain.
+
+Boundary change for B: drive `session.tick(dt)`, not
+`rules.tick(...)`. `session.tick` calls `rules.tick` for the
+current level, then handles `TIME_UP` (lose a life, respawn at
+home via the shared `respawn_after_catch`, reset the timer to
+full, pacgums stay eaten; `GAME_OVER` on the last life),
+`LEVEL_CLEARED` (next level, or `GAME_WON` on the last one) and
+`GAME_OVER` (mark finished). Input goes through
+`session.set_direction(direction)` — same `Direction`, same
+meaning as `rules.set_direction`, B never touches the inner
+state object directly.
+
+Pause contract (REQ-109): core owns no clock. `tick` consumes
+only the `dt` it is given, and the level timer subtracts that
+same clamped `dt` (never the raw frame time, so lag cannot eat
+the timer). B pauses by not calling `tick`; calling `tick`
+with a real `dt` while "paused" would keep the game running.
+`tick(dt=0)` is a safe no-op.
+
+Time-up decision (REQ-104): time-up costs one life and restarts
+the timer, it does not end the game immediately. Rationale: it
+reuses the exact ghost-death punishment (one life, everybody
+home, fright cancelled), and 90 s comfortably fits a level
+(~23 s for 42 pacgums at speed 8), so the limit punishes
+stalling without making the game unwinnable.
 
 ---
 
@@ -302,7 +355,8 @@ pixel by pixel, which is expensive, and the maze does not change during a level.
 pacman/
 ├── log.py    A   logging setup, shared by every package
 ├── errors.py A   project-specific exception hierarchy, shared by every package
-├── core/     A   entities, movement, ghost behaviour, rules, scoring, timer
+├── game.py   A   composition layer: the only module importing both core/ and data/
+├── core/     A   entities, movement, ghost behaviour, rules, scoring, timer, session
 ├── maze/     A   adapter to mazegenerator, normalisation, invariant checks
 ├── data/     A   config loading and validation, highscore persistence
 ├── render/   B   graphics facade, renderer, sprite loading
@@ -322,9 +376,11 @@ same reasoning applies to `log.py` rather than `logging.py`.
 | `log.py` imports nothing from the project | leaf module: everything may depend on it, it depends on nothing |
 | `errors.py` imports nothing from the project | leaf module, same reason; importing it must never create a cycle |
 | `core` imports nothing from `render` or `ui` | headless execution, REQ-022 |
+| `core` imports nothing from `data` | config is plain data; `pacman/game.py` translates `Config` into `GameSettings`/`LevelSpec` |
+| `data/` imports nothing from `core` | config and highscores are plain data |
+| only `pacman/game.py` imports both `core` and `data` | single composition point, no scattered glue |
 | Only `maze/` imports `mazegenerator` | REQ-058; the adapter is the only place that knows the package |
 | Only the graphics facade in `render/` imports pygame | the facade rule in `graphics-library.md` |
-| `data/` imports nothing from `core` | config and highscores are plain data |
 
 ---
 
@@ -412,4 +468,79 @@ Recorded here so they are not silently decided by whoever writes the code first.
 | 3 | Duration of the frightened state | provisionally 7.0 s (`GameSettings.fright_duration`), pending playtesting |
 | 4 | Ghost respawn delay within the 5–10 s range | provisionally 7.0 s (`GameSettings.respawn_delay`), pending playtesting |
 | 5 | Ghost chase behaviour | resolved: greedy Manhattan chase with per-ghost randomness, see the REQ-091 decision in the requirements matrix |
-| 6 | Behaviour when a level's time limit expires | REQ-104, still open in the matrix |
+| 6 | Behaviour when a level's time limit expires | REQ-104, resolved: time-up costs one life, respawns everybody at home, resets the timer to full; pacgums stay eaten (see the Session contract) |
+| 7 | Highscore name rules and storage | resolved in Phase 9, see section 12 |
+
+---
+
+## 12. Contract: highscores
+
+One table shared across runs. A owns the format, the rules and
+the file; B owns the two screens (menu list, name entry) that
+show it and fill it.
+
+### `HighscoreEntry`
+
+| Field | Type | Meaning |
+|---|---|---|
+| `name` | `str` | player name, ASCII letters/digits/spaces, 1–10 chars |
+| `score` | `int` | non-negative points total of one finished run |
+
+The file holds a JSON list of `{"name", "score"}` objects with
+`indent=2` (REQ-063: human-readable, diffable). No dates, no
+levels — V.5 asks for names and scores only.
+
+### Name rules (decisions A and B)
+
+Pattern `[A-Za-z0-9 ]{1,10}` matched with `fullmatch`. ASCII,
+not Unicode, for two reasons that hold regardless of the font.
+First, "alphanumeric" in V.5 most directly reads as ASCII
+letters and digits, matching the subject's own example table.
+Second, the menu font is chosen by B and not yet fixed:
+allowing Unicode now would let names into the saved file that
+a Latin-only font cannot draw in the menu (REQ-070).
+Widening the pattern later is a one-line change; narrowing it
+after scores already exist is not.
+
+`normalise_name` fixes instead of rejecting: strip the edges,
+cut to 10 chars, fall back to `"PLAYER"` when empty or still
+off-pattern. It never raises and never returns `""`, so B
+passes whatever the entry screen collected with no error path.
+There is deliberately no separate "is this name acceptable"
+check: live feedback during typing belongs to Phase 10 at the
+earliest, and V.5 never asks for it.
+
+File rows go the other way: a name that is not already valid
+means tampering or corruption, so the record is dropped like
+any other corrupt field.
+
+### File behaviour
+
+`load(path)` never raises. A missing file is a normal first
+launch (empty table, no warning); an unreadable, non-JSON or
+non-list file degrades to an empty table with a warning.
+Corrupt records drop individually: three bad rows out of fifty
+leave forty-seven. Whatever survives is re-sorted and cut to
+ten, because file content is never trusted.
+
+`save(path, entries)` writes atomically (decision D): payload
+to a temporary file in the target's own directory (same
+filesystem, so the final `os.replace` stays one indivisible
+step on POSIX and Windows alike), `flush`, then the rename. A
+crash mid-write leaves the previous table untouched. Missing
+parent folders are created. Failures are logged and reported
+as `False`, never raised — the game continues either way. No
+`os.fsync`: flush plus the rename already survive a process
+crash; power-loss durability is beyond the subject.
+
+### Who does what, when (REQ-068)
+
+`pacman/game.py` exposes both ends: `load_highscores(config)`
+once at startup (the table lives next to the session in
+`pac-man.py`, not inside `Session` — it outlives any single
+run), `save_score(config, entries, name, score)` after the
+player types a name on the Game Over / Victory screen. The
+path always comes from `config.highscore_filename` (REQ-040).
+B reads the loaded tuple for the menu (REQ-070) and hands the
+typed string to `save_score`; it never touches the file
+directly.

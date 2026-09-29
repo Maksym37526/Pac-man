@@ -19,3 +19,5 @@ class GameEvent(Enum):
     GAME_OVER = auto()
     FRIGHT_STARTED = auto()
     FRIGHT_ENDED = auto()
+    TIME_UP = auto()
+    GAME_WON = auto()
