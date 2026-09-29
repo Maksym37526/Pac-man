@@ -237,8 +237,7 @@ the HUD. Phases 6 and 7 extend the enum, they never reinterpret it.
 | `FRIGHT_STARTED` | a super-pacgum turns every `NORMAL` ghost `FRIGHTENED` (timer resets, never stacks) |
 | `FRIGHT_ENDED` | the fright timer crosses zero, or death cancels an active fright; exactly once per fright — paired events are always paired, including cancellation paths |
 | `TIME_UP` | the level timer crosses zero; fires once, on the crossing tick only, with no movement or eating in that tick |
-| `LEVEL_CLEARED` | the tick that eats the last remaining dot (ordinary and super sets both empty); exactly once, never repeated on later ticks |
-| `GAME_WON` |  on the last level; the session is finished, later ticks emit nothing |
+| `GAME_WON` | the cleared level is the last one in the run; the session is finished, later ticks emit nothing |
 
 ### `GameSettings`
 
@@ -470,3 +469,78 @@ Recorded here so they are not silently decided by whoever writes the code first.
 | 4 | Ghost respawn delay within the 5–10 s range | provisionally 7.0 s (`GameSettings.respawn_delay`), pending playtesting |
 | 5 | Ghost chase behaviour | resolved: greedy Manhattan chase with per-ghost randomness, see the REQ-091 decision in the requirements matrix |
 | 6 | Behaviour when a level's time limit expires | REQ-104, resolved: time-up costs one life, respawns everybody at home, resets the timer to full; pacgums stay eaten (see the Session contract) |
+| 7 | Highscore name rules and storage | resolved in Phase 9, see section 12 |
+
+---
+
+## 12. Contract: highscores
+
+One table shared across runs. A owns the format, the rules and
+the file; B owns the two screens (menu list, name entry) that
+show it and fill it.
+
+### `HighscoreEntry`
+
+| Field | Type | Meaning |
+|---|---|---|
+| `name` | `str` | player name, ASCII letters/digits/spaces, 1–10 chars |
+| `score` | `int` | non-negative points total of one finished run |
+
+The file holds a JSON list of `{"name", "score"}` objects with
+`indent=2` (REQ-063: human-readable, diffable). No dates, no
+levels — V.5 asks for names and scores only.
+
+### Name rules (decisions A and B)
+
+Pattern `[A-Za-z0-9 ]{1,10}` matched with `fullmatch`. ASCII,
+not Unicode, for two reasons that hold regardless of the font.
+First, "alphanumeric" in V.5 most directly reads as ASCII
+letters and digits, matching the subject's own example table.
+Second, the menu font is chosen by B and not yet fixed:
+allowing Unicode now would let names into the saved file that
+a Latin-only font cannot draw in the menu (REQ-070).
+Widening the pattern later is a one-line change; narrowing it
+after scores already exist is not.
+
+`normalise_name` fixes instead of rejecting: strip the edges,
+cut to 10 chars, fall back to `"PLAYER"` when empty or still
+off-pattern. It never raises and never returns `""`, so B
+passes whatever the entry screen collected with no error path.
+There is deliberately no separate "is this name acceptable"
+check: live feedback during typing belongs to Phase 10 at the
+earliest, and V.5 never asks for it.
+
+File rows go the other way: a name that is not already valid
+means tampering or corruption, so the record is dropped like
+any other corrupt field.
+
+### File behaviour
+
+`load(path)` never raises. A missing file is a normal first
+launch (empty table, no warning); an unreadable, non-JSON or
+non-list file degrades to an empty table with a warning.
+Corrupt records drop individually: three bad rows out of fifty
+leave forty-seven. Whatever survives is re-sorted and cut to
+ten, because file content is never trusted.
+
+`save(path, entries)` writes atomically (decision D): payload
+to a temporary file in the target's own directory (same
+filesystem, so the final `os.replace` stays one indivisible
+step on POSIX and Windows alike), `flush`, then the rename. A
+crash mid-write leaves the previous table untouched. Missing
+parent folders are created. Failures are logged and reported
+as `False`, never raised — the game continues either way. No
+`os.fsync`: flush plus the rename already survive a process
+crash; power-loss durability is beyond the subject.
+
+### Who does what, when (REQ-068)
+
+`pacman/game.py` exposes both ends: `load_highscores(config)`
+once at startup (the table lives next to the session in
+`pac-man.py`, not inside `Session` — it outlives any single
+run), `save_score(config, entries, name, score)` after the
+player types a name on the Game Over / Victory screen. The
+path always comes from `config.highscore_filename` (REQ-040).
+B reads the loaded tuple for the menu (REQ-070) and hands the
+typed string to `save_score`; it never touches the file
+directly.
