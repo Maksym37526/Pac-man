@@ -19,13 +19,16 @@ from pacman.errors import ConfigError
 from pacman.maze.level import build_level
 from pacman.maze.model import Direction
 from pacman.render.facade import GraphicsFacade
+from pacman.render.layout import fit_layout
 from pacman.render.view_state import RenderGameState
-from pacman.render.renderer import Renderer, window_size_for_config
+from pacman.render.renderer import Renderer
 from pacman.ui.cheats import CheatKind
 from pacman.ui.events import InputEvent, translate
 from pacman.ui.state_machine import (
     AppState, AppStateMachine, GameOverPayload, HighscoresPayload, VictoryPayload,
 )
+from pacman.data.highscore import HighscoreEntry
+from pacman.game import load_highscores, save_score
 
 _DIRECTION_BY_INPUT: dict[InputEvent, Direction] = {
     InputEvent.UP: Direction.UP,
@@ -74,10 +77,15 @@ def main() -> None:
     rng = Random(config.seed)
     maze, game_state = build_render_state(config, level_index=0, rng=rng, carried_score=0)
 
-    window_width, window_height = window_size_for_config(config)
-    facade = GraphicsFacade(window_width, window_height, title="Pac-Man")
-    renderer = Renderer(facade, window_width, window_height)
+    max_cols = max(level.width for level in config.levels)
+    max_rows = max(level.height for level in config.levels)
+    layout = fit_layout(max_cols, max_rows)
+    facade = GraphicsFacade(layout.window_width, layout.window_height, title="Pac-Man", font_size=layout.font_size)
+    renderer = Renderer(facade, layout)
     machine = AppStateMachine()
+
+    # Load highscores at startup
+    highscore_entries = load_highscores(config)
 
     settings = GameSettings(
         pacgum=config.points_per_pacgum,
@@ -103,7 +111,27 @@ def main() -> None:
                 elif event is InputEvent.CHEAT_EXTRA_LIFE:
                     game_state.core.lives += 1
                 elif event is InputEvent.CHEAT_LEVEL_SKIP:
-                    print("CHEAT_LEVEL_SKIP requested — no-op")
+                    # Skip to next level
+                    next_index = game_state.level_index + 1
+                    if next_index >= len(config.levels):
+                        machine.state = AppState.VICTORY
+                    else:
+                        maze, game_state = build_render_state(config, next_index, rng, game_state.core.score)
+                        level_prepared = False
+            elif machine.state is AppState.GAME_OVER and event is InputEvent.SELECT:
+                machine.state = AppState.NAME_ENTRY
+            elif machine.state is AppState.VICTORY and event is InputEvent.SELECT:
+                machine.state = AppState.NAME_ENTRY
+            elif machine.state is AppState.NAME_ENTRY and event is InputEvent.SELECT:
+                # Save highscore
+                name = machine.name_buffer
+                score = game_state.core.score
+                highscore_entries, _ = save_score(config, highscore_entries, name, score)
+                machine.state = AppState.MAIN_MENU
+                # Reset game state for next run
+                rng = Random(config.seed)
+                maze, game_state = build_render_state(config, level_index=0, rng=rng, carried_score=0)
+                level_prepared = False
 
         if machine.state is AppState.EXIT:
             running = False
@@ -115,12 +143,14 @@ def main() -> None:
             renderer.draw_screen(AppState.PAUSED, None)
         elif machine.state is AppState.VICTORY:
             renderer.draw_screen(AppState.VICTORY, VictoryPayload(final_score=game_state.core.score))
+            # Auto-transition to NAME_ENTRY after a short delay or on keypress
+            # For now, we'll transition on next event
         elif machine.state is AppState.GAME_OVER:
             renderer.draw_screen(AppState.GAME_OVER, GameOverPayload(final_score=game_state.core.score))
         elif machine.state is AppState.NAME_ENTRY:
             renderer.draw_screen(AppState.NAME_ENTRY, machine.name_entry_payload())
         elif machine.state is AppState.HIGHSCORES:
-            renderer.draw_screen(AppState.HIGHSCORES, HighscoresPayload(entries=[]))
+            renderer.draw_screen(AppState.HIGHSCORES, HighscoresPayload(entries=[(e.name, e.score) for e in highscore_entries]))
         elif machine.state is AppState.INSTRUCTIONS:
             renderer.draw_screen(AppState.INSTRUCTIONS, None)
         elif machine.state is AppState.PLAYING:

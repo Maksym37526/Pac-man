@@ -10,14 +10,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-TILE_SIZES: tuple[int, ...] = (32, 24, 16)
+TILE_SIZES: tuple[int, ...] = (64, 48, 32, 24, 16)
 """Tile sizes the sprite sets will be authored for (refactor step 3).
 
 There is no scaling primitive (see graphics_library.md), so sprites
 cannot be stretched: each size needs its own pre-made set.
 """
 
-WINDOW_BUDGET: tuple[int, int] = (1280, 800)
+WINDOW_BUDGET: tuple[int, int] = (4000, 4000)
 """Largest window (width, height) we aim for, in pixels."""
 
 MIN_TILE = 8
@@ -107,7 +107,10 @@ def make_layout(tile: int, max_cols: int, max_rows: int) -> Layout:
         raise ValueError(f"tile {tile} is below the minimum {MIN_TILE}")
     if max_cols < 1 or max_rows < 1:
         raise ValueError(f"level size {max_cols}x{max_rows} must be positive")
-    font_size = max(12, tile * 3 // 4)
+    window_width = max_cols * tile
+    window_height = max_rows * tile
+    # Font size scales with window size, not just tile size
+    font_size = max(16, min(window_width, window_height) // 20)
     hud_height = font_size * 2
     return Layout(
         tile=tile,
@@ -117,8 +120,8 @@ def make_layout(tile: int, max_cols: int, max_rows: int) -> Layout:
         super_radius=max(2, tile * 3 // 16),
         font_size=font_size,
         hud_height=hud_height,
-        window_width=max_cols * tile,
-        window_height=max_rows * tile + hud_height,
+        window_width=window_width,
+        window_height=window_height + hud_height,
     )
 
 
