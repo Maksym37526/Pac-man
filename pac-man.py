@@ -8,6 +8,7 @@ from dataclasses import replace
 from random import Random
 
 from pacman.core.cheats import CheatCommand
+from pacman.core.collision import world_position
 from pacman.core.events import GameEvent
 from pacman.data.cli import parse
 from pacman.data.config import build_config
@@ -17,6 +18,7 @@ from pacman.errors import ConfigError
 from pacman.maze.model import Direction
 from pacman.render.facade import GraphicsFacade
 from pacman.render.layout import fit_layout
+from pacman.render import theme
 from pacman.render.timing import FrameLimiter
 from pacman.render.view_state import RenderGameState
 from pacman.render.renderer import Renderer
@@ -98,6 +100,12 @@ def main() -> None:
             prev_state = machine.state
             machine.handle(event)
 
+            if event is InputEvent.THEME_NEXT:
+                theme.cycle_theme()
+                level_prepared = False
+            elif event is InputEvent.GHOST_PARTY:
+                renderer.toggle_party()
+
             if machine.confirmed_name is not None:
                 # Cheated runs show the name screen but never store:
                 # cheats_used rises once and never lowers (core flag).
@@ -114,6 +122,7 @@ def main() -> None:
                 # Fresh run on every START_GAME: the old session is
                 # finished (lives spent) or mid-run (abandoned pause).
                 session = start_run(config, Random(config.seed))
+                renderer.reset_fx()
                 level_prepared = False
                 continue
 
@@ -128,6 +137,8 @@ def main() -> None:
                             machine.state = AppState.VICTORY
                         elif game_event is GameEvent.LEVEL_CLEARED:
                             level_prepared = False
+                        elif game_event is GameEvent.PLAYER_CAUGHT:
+                            renderer.add_shake(1.0)
 
         if machine.state is AppState.EXIT:
             running = False
@@ -141,6 +152,7 @@ def main() -> None:
         elif machine.state is AppState.PAUSED:
             renderer.draw_screen(AppState.PAUSED, None)
         elif machine.state is AppState.VICTORY:
+            renderer.advance(dt)  # drives the confetti shower
             renderer.draw_screen(AppState.VICTORY, VictoryPayload(final_score=session.level.score))
             # Auto-transition to NAME_ENTRY after a short delay or on keypress
             # For now, we'll transition on next event
@@ -161,6 +173,29 @@ def main() -> None:
                 level_prepared = True
             renderer.advance(dt)
             for game_event in session.tick(dt):
+                if game_event is GameEvent.PACGUM_EATEN:
+                    px, py = world_position(session.level.player)
+                    renderer.spawn_floater(
+                        px, py, f"+{config.points_per_pacgum}", (255, 255, 255)
+                    )
+                elif game_event is GameEvent.SUPER_PACGUM_EATEN:
+                    px, py = world_position(session.level.player)
+                    renderer.spawn_floater(
+                        px, py,
+                        f"+{config.points_per_super_pacgum}",
+                        (255, 220, 0),
+                    )
+                    renderer.add_shake(0.5)
+                elif game_event is GameEvent.GHOST_EATEN:
+                    px, py = world_position(session.level.player)
+                    renderer.spawn_floater(
+                        px, py,
+                        f"+{config.points_per_ghost}",
+                        (255, 120, 150),
+                    )
+                    renderer.add_shake(0.4)
+                if game_event is GameEvent.PLAYER_CAUGHT:
+                    renderer.add_shake(1.0)
                 if game_event is GameEvent.GAME_OVER:
                     machine.state = AppState.GAME_OVER
                     break

@@ -109,6 +109,18 @@ class Renderer:
         """Kick the screen trauma meter (0..1, keeps the max)."""
         self._shake = max(0.0, min(1.0, max(self._shake, amount)))
 
+    def reset_fx(self) -> None:
+        """Drop run-scoped effects: shake trauma and live floaters.
+
+        Called on every fresh START_GAME so the previous run's
+        death shake (or uneaten popups) never leaks into the new
+        run: menus never call advance(), so trauma would otherwise
+        sit at 1.0 until the new game decays it.
+        """
+        self._shake = 0.0
+        self._floaters = []
+        self._confetti = []
+
     def _shake_offset(self) -> tuple[int, int]:
         """Current world offset: trauma-squared falloff, sinusoidal."""
         mag = 10.0 * self._shake * self._shake
