@@ -1,14 +1,3 @@
-<<<<<<< HEAD
-.PHONY: install run debug clean lint lint-strict
-
-
-install:
-	uv venv .venv
-	uv sync
-
-run:
-	uv run python pacman.py
-=======
 # Pac-Man — 42 project
 # Subject III.2 requires the rules: install, run, debug, clean, lint.
 # lint-strict is optional but recommended.
@@ -72,4 +61,3 @@ test:
 ## help: list the available rules
 help:
 	@grep -E '^## ' $(MAKEFILE_LIST) | sed 's/## /  make /'
->>>>>>> main

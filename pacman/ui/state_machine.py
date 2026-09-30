@@ -155,9 +155,11 @@ class AppStateMachine:
         elif event is InputEvent.BACK:
             self.state = AppState.MAIN_MENU
 
-    def main_menu_payload(self) -> MainMenuPayload:
+    def main_menu_payload(
+        self, top: tuple[tuple[str, int], ...] = ()
+    ) -> MainMenuPayload:
         """Build the payload draw_screen needs for the current menu state."""
-        return MainMenuPayload(selected_index=self.menu_index)
+        return MainMenuPayload(selected_index=self.menu_index, top=top)
 
     def _handle_name_entry(self, event: InputEvent | TypedChar) -> None:
         """Build up to 10 ASCII alphanumeric-or-space characters, then confirm.
@@ -212,8 +214,11 @@ class MainMenuPayload:
 
     Attributes:
         selected_index: Index into the menu items, for highlighting.
+        top: Best (name, score) pairs for the menu board, from the
+            composer (already sorted/limited).
     """
     selected_index: int
+    top: tuple[tuple[str, int], ...] = ()
 
 
 @dataclass(frozen=True)

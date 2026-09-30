@@ -30,6 +30,8 @@ class InputEvent(Enum):
     PAUSE = auto()
     QUIT = auto()
     TEXT_BACKSPACE = auto()
+    THEME_NEXT = auto()
+    GHOST_PARTY = auto()
     CHEAT_MASTER = auto()
     CHEAT_INVINCIBLE = auto()
     CHEAT_FAST = auto()
@@ -54,6 +56,10 @@ _KEY_MAP: dict[str, InputEvent] = {
     "ц": InputEvent.UP, "ф": InputEvent.LEFT,
     "ы": InputEvent.DOWN, "в": InputEvent.RIGHT,
     "з": InputEvent.PAUSE,
+    "t": InputEvent.THEME_NEXT,
+    "е": InputEvent.THEME_NEXT,
+    "g": InputEvent.GHOST_PARTY,
+    "п": InputEvent.GHOST_PARTY,
     "1": InputEvent.CHEAT_MASTER,
     "2": InputEvent.CHEAT_INVINCIBLE,
     "3": InputEvent.CHEAT_FAST,

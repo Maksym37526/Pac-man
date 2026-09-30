@@ -59,6 +59,8 @@ operations below. Each one has a documented MLX counterpart.
 | Load an image from a file | `pygame.image.load` | `mlx_png_file_to_image` |
 | Draw a text string | `Font.render` + `blit` | `mlx_string_put` |
 | Receive key events | iterate `pygame.event.get()` | `mlx_key_hook` / `mlx_hook` |
+| Extra font sizes/families | `SysFont` with other size/family args | same call, creation params (confirm with staff) |
+| Measure a string | `Font.size` via the facade | bookkeeping for centering, draws nothing (confirm with staff) |
 | Receive the window-close event | `QUIT` event | `mlx_hook` (destroy event) |
 | Advance the main loop | our own loop | `mlx_loop` / `mlx_loop_hook` |
 

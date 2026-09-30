@@ -70,9 +70,21 @@ class GraphicsFacade:
             (width, height)
         )
         pygame.display.set_caption(title)
-        self._font: pygame.font.Font = pygame.font.SysFont(None, font_size)
+        self._fonts: dict[str, pygame.font.Font] = {
+            "body": pygame.font.SysFont(None, font_size),
+            "head": pygame.font.SysFont(
+                None, font_size * 3 // 2, bold=True
+            ),
+            "logo": pygame.font.SysFont(
+                ["arialblack", "dejavusans", "freesans"],
+                font_size * 2,
+                bold=True,
+            ),
+        }
         self._image_cache: dict[Path, pygame.Surface] = {}
-        self._text_cache: dict[tuple[str, Color], pygame.Surface] = {}
+        self._text_cache: dict[
+            tuple[str, Color, str], pygame.Surface
+        ] = {}
 
     def close(self) -> None:
         """Shut down pygame. Safe to call more than once."""
@@ -125,20 +137,29 @@ class GraphicsFacade:
         text: str,
         position: tuple[int, int],
         color: Color,
+        font: str = "body",
     ) -> None:
         """Render a text string and blit it into a buffer.
 
-        Rendered text is cached by (text, colour): most strings repeat
-        from frame to frame and Font.render is the expensive part.
+        Rendered text is cached by (text, colour, font): most
+        strings repeat from frame to frame and Font.render is
+        the expensive part.
         """
-        key = (text, color)
+        key = (text, color, font)
         rendered = self._text_cache.get(key)
         if rendered is None:
             if len(self._text_cache) >= _TEXT_CACHE_LIMIT:
                 self._text_cache.clear()
-            rendered = self._font.render(text, False, color)
+            rendered = self._fonts[font].render(text, False, color)
             self._text_cache[key] = rendered
         buffer.blit(rendered, position)
+
+    def text_size(self, text: str, font: str = "body") -> tuple[int, int]:
+        """Width and height a string would occupy, for centering.
+
+        Metrics only, nothing is drawn.
+        """
+        return self._fonts[font].size(text)
 
     def poll_events(self) -> list[RawEvent]:
         """Return this frame's window events, without pygame types."""

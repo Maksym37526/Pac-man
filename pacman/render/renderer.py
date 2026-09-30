@@ -12,6 +12,8 @@ buffer is reused for every frame.
 
 from __future__ import annotations
 
+import math
+import random
 from pathlib import Path
 
 from pacman.core.entity import GHOST_KINDS, Entity, EntityKind, EntityMode
@@ -19,35 +21,7 @@ from pacman.core.movement import MAX_DT
 from pacman.maze.model import Cell, Direction, Maze, step
 from pacman.render.facade import Buffer, Color, GraphicsFacade
 from pacman.render.layout import Layout
-from pacman.render.theme import (
-    BLOCK_COLOR,
-    CHEAT_INDICATOR_COLOR,
-    EATEN_COLOR,
-    FLOOR_COLOR,
-    FRIGHTENED_COLOR,
-    GAME_OVER_BACKGROUND,
-    GAME_OVER_TITLE_COLOR,
-    GHOST_COLORS,
-    HUD_BACKGROUND,
-    HUD_TEXT_COLOR,
-    MENU_BACKGROUND,
-    MENU_ITEM_COLOR,
-    MENU_SELECTED_COLOR,
-    MENU_TITLE_COLOR,
-    PACGUM_COLOR,
-    PAUSE_BACKGROUND,
-    PAUSE_ITEM_COLOR,
-    PAUSE_TITLE_COLOR,
-    PLAYER_COLOR,
-    SCREEN_BACKGROUND,
-    SCREEN_TEXT_COLOR,
-    SCREEN_TITLE_COLOR,
-    SUPER_PACGUM_COLOR,
-    VICTORY_BACKGROUND,
-    VICTORY_TEXT_COLOR,
-    VICTORY_TITLE_COLOR,
-    WALL_COLOR,
-)
+from pacman.render import theme
 from pacman.render.view_state import RenderGameState
 from pacman.ui.state_machine import (
     MAIN_MENU_LABELS,
@@ -59,6 +33,26 @@ from pacman.ui.state_machine import (
     VictoryPayload,
     _MAIN_MENU_ORDER,
 )
+
+
+_DISCO: tuple[Color, ...] = (
+    (255, 90, 90),
+    (255, 200, 90),
+    (130, 255, 130),
+    (130, 180, 255),
+    (210, 130, 255),
+)
+"""Party wall cycle, two steps per second."""
+
+_CONFETTI: tuple[Color, ...] = (
+    (255, 90, 90),
+    (255, 210, 90),
+    (130, 255, 130),
+    (130, 200, 255),
+    (220, 130, 255),
+    (255, 255, 255),
+)
+"""Victory confetti colors."""
 
 
 class Renderer:
@@ -91,11 +85,37 @@ class Renderer:
         )
         self._last_dir: dict[EntityKind, Direction] = {}
         self._last_xy: dict[EntityKind, tuple[int, int]] = {}
+        self._party: bool = False
+        self._shake: float = 0.0
+        self._confetti: list[
+            tuple[float, float, float, float, float, Color]
+        ] = []
+        self._confetti_rng = random.Random(1234)
+        self._floaters: list[
+            tuple[float, float, str, Color, float]
+        ] = []
         # Game-time clock for sprite animation. Advanced explicitly
         # via advance(), which the main loop calls only with the same
         # dt it feeds tick() — so pause freezes mouths and blinking
         # together with the simulation (REQ-108/109).
         self._anim_t: float = 0.0
+
+    def toggle_party(self) -> bool:
+        """Flip ghost party mode (color shuffle); returns the new state."""
+        self._party = not self._party
+        return self._party
+
+    def add_shake(self, amount: float) -> None:
+        """Kick the screen trauma meter (0..1, keeps the max)."""
+        self._shake = max(0.0, min(1.0, max(self._shake, amount)))
+
+    def _shake_offset(self) -> tuple[int, int]:
+        """Current world offset: trauma-squared falloff, sinusoidal."""
+        mag = 10.0 * self._shake * self._shake
+        return (
+            int(math.sin(self._anim_t * 90.0) * mag),
+            int(math.cos(self._anim_t * 70.0) * mag),
+        )
 
     def advance(self, dt: float) -> None:
         """Move the animation clock by one simulated step.
@@ -105,6 +125,7 @@ class Renderer:
         """
         if dt > 0.0:
             self._anim_t += min(dt, MAX_DT)
+            self._shake = max(0.0, self._shake - dt * 1.5)
 
     def cell_to_screen(
         self, cell: Cell, progress_x: float = 0.0, progress_y: float = 0.0
@@ -125,26 +146,38 @@ class Renderer:
         buffer = self._facade.new_buffer(
             layout.window_width, layout.window_height
         )
-        self._facade.clear(buffer, FLOOR_COLOR)
+        self._facade.clear(buffer, theme.FLOOR_COLOR)
         for row in range(maze.height):
             for col in range(maze.width):
                 cell = Cell(col, row)
                 if cell in maze.blocks:
-                    self._fill_tile(buffer, cell, BLOCK_COLOR)
+                    self._fill_tile(buffer, cell, theme.BLOCK_COLOR)
+        # No solid HUD strip: the score line floats over the floor
+        # color in the reserved area below the maze.
+        self._background = buffer
+
+    def _wall_color(self) -> Color:
+        """Current wall paint: theme color, or cycling rainbow in party."""
+        if not self._party:
+            return theme.WALL_COLOR
+        return _DISCO[int(self._anim_t * 2) % len(_DISCO)]
+
+    def _draw_walls(self, buffer: Buffer, maze: Maze) -> None:
+        """Wall edges and block rims, repainted every frame.
+
+        Lives outside the cached background because party mode
+        recolors them continuously; every piece is one blit of a
+        cached solid, so per-frame cost stays flat.
+        """
+        for row in range(maze.height):
+            for col in range(maze.width):
+                cell = Cell(col, row)
+                if cell in maze.blocks:
                     self._draw_block_rim(buffer, cell, maze)
                     continue
                 for direction in Direction:
                     if maze.is_wall_between(cell, direction):
                         self._draw_wall_edge(buffer, cell, direction)
-        self._fill_rect(
-            buffer,
-            0,
-            layout.hud_top,
-            layout.window_width,
-            layout.hud_height,
-            HUD_BACKGROUND,
-        )
-        self._background = buffer
 
     def draw_game(self, state: RenderGameState) -> None:
         """Draw the cached maze, then pickups, entities and the HUD text.
@@ -156,14 +189,22 @@ class Renderer:
             raise RuntimeError("draw_game called before prepare_level")
         frame = self._frame
         self._facade.blit(self._background, (0, 0), dest=frame)
+        saved_origin = self._origin
+        ox, oy = self._shake_offset()
+        self._origin = (saved_origin[0] + ox, saved_origin[1] + oy)
+        try:
+            self._draw_walls(frame, state.core.maze)
 
-        for cell in state.core.pacgums:
-            self._draw_pickup(frame, cell, "dot_small")
-        for cell in state.core.super_pacgums:
-            self._draw_pickup(frame, cell, "dot_big")
-        self._draw_player(frame, state.core.player)
-        for ghost in state.core.ghosts:
-            self._draw_ghost(frame, ghost, state.core.frightened_remaining)
+            for cell in state.core.pacgums:
+                self._draw_pickup(frame, cell, "dot_small")
+            for cell in state.core.super_pacgums:
+                self._draw_pickup(frame, cell, "dot_big")
+            self._draw_player(frame, state.core.player)
+            for ghost in state.core.ghosts:
+                self._draw_ghost(frame, ghost, state.core.frightened_remaining)
+            self._draw_floaters(frame)
+        finally:
+            self._origin = saved_origin
         self._draw_hud(frame, state)
 
         self._facade.blit(frame, (0, 0))
@@ -228,16 +269,16 @@ class Renderer:
             if neighbour in maze.blocks:
                 continue
             if direction is Direction.UP:
-                self._fill_rect(buffer, x, y, tile, rim, WALL_COLOR)
+                self._fill_rect(buffer, x, y, tile, rim, self._wall_color())
             elif direction is Direction.DOWN:
                 self._fill_rect(
-                    buffer, x, y + tile - rim, tile, rim, WALL_COLOR
+                    buffer, x, y + tile - rim, tile, rim, self._wall_color()
                 )
             elif direction is Direction.LEFT:
-                self._fill_rect(buffer, x, y, rim, tile, WALL_COLOR)
+                self._fill_rect(buffer, x, y, rim, tile, self._wall_color())
             elif direction is Direction.RIGHT:
                 self._fill_rect(
-                    buffer, x + tile - rim, y, rim, tile, WALL_COLOR
+                    buffer, x + tile - rim, y, rim, tile, self._wall_color()
                 )
 
     def _draw_wall_edge(
@@ -248,13 +289,17 @@ class Renderer:
         tile = self._layout.tile
         wall = self._layout.wall
         if direction is Direction.UP:
-            self._fill_rect(buffer, x, y, tile, wall, WALL_COLOR)
+            self._fill_rect(buffer, x, y, tile, wall, self._wall_color())
         elif direction is Direction.DOWN:
-            self._fill_rect(buffer, x, y + tile - wall, tile, wall, WALL_COLOR)
+            self._fill_rect(
+                buffer, x, y + tile - wall, tile, wall, self._wall_color()
+            )
         elif direction is Direction.LEFT:
-            self._fill_rect(buffer, x, y, wall, tile, WALL_COLOR)
+            self._fill_rect(buffer, x, y, wall, tile, self._wall_color())
         elif direction is Direction.RIGHT:
-            self._fill_rect(buffer, x + tile - wall, y, wall, tile, WALL_COLOR)
+            self._fill_rect(
+                buffer, x + tile - wall, y, wall, tile, self._wall_color()
+            )
 
     def _sprite(self, name: str) -> Buffer | None:
         """One pregenerated frame, or None when the tile set is absent."""
@@ -286,12 +331,12 @@ class Renderer:
             if name == "dot_big":
                 radius, color = (
                     self._layout.super_radius,
-                    SUPER_PACGUM_COLOR,
+                    theme.SUPER_PACGUM_COLOR,
                 )
             else:
                 radius, color = (
                     self._layout.pacgum_radius,
-                    PACGUM_COLOR,
+                    theme.PACGUM_COLOR,
                 )
             half = self._layout.tile // 2
             self._fill_rect(
@@ -345,7 +390,7 @@ class Renderer:
             size = self._layout.tile - 2 * margin
             self._fill_rect(
                 buffer, x + margin, y + margin,
-                size, size, PLAYER_COLOR,
+                size, size, theme.PLAYER_COLOR,
             )
             return
         self._blit_frame(buffer, sprite, x, y)
@@ -353,18 +398,25 @@ class Renderer:
     def _draw_ghost(
         self, buffer: Buffer, ghost: Entity, frightened_remaining: float
     ) -> None:
-        """Body by color and mode, directional eyes on top when normal."""
+        """Body by color and mode, directional eyes on top when normal.
+
+        Party mode rotates the sprite row over time, recreating the
+        infamous color-shuffle bug on purpose. Logic (kind, mode)
+        is untouched: only the displayed row moves.
+        """
         try:
             kind_index = GHOST_KINDS.index(ghost.kind)
         except ValueError:
             kind_index = 0
+        if self._party:
+            kind_index = (kind_index + int(self._anim_t)) % 4
         phase = int(self._anim_t * 8) % 4
         x, y = self._entity_xy(ghost)
         if ghost.mode is EntityMode.EATEN:
             eye = self._EYE_BY_DIR.get(self._facing(ghost), 1)
             eyes = self._sprite(f"eyes_{eye}")
             if eyes is None:
-                self._fill_square(buffer, x, y, EATEN_COLOR)
+                self._fill_square(buffer, x, y, theme.EATEN_COLOR)
                 return
             self._blit_frame(buffer, eyes, x, y + self._layout.tile // 4)
             return
@@ -375,7 +427,7 @@ class Renderer:
                 names = ["ghost_fright_0", "ghost_fright_1"]
             sprite = self._sprite(names[int(self._anim_t * 8) % 2])
             if sprite is None:
-                self._fill_square(buffer, x, y, FRIGHTENED_COLOR)
+                self._fill_square(buffer, x, y, theme.FRIGHTENED_COLOR)
                 return
             self._blit_frame(buffer, sprite, x, y)
             return
@@ -408,13 +460,13 @@ class Renderer:
     def _ghost_color(self, ghost: Entity) -> Color:
         """Pick a ghost's colour from its mode and identity (fallback)."""
         if ghost.mode is EntityMode.EATEN:
-            return EATEN_COLOR
+            return theme.EATEN_COLOR
         if ghost.mode is EntityMode.FRIGHTENED:
-            return FRIGHTENED_COLOR
-        return GHOST_COLORS[ghost.kind]
+            return theme.FRIGHTENED_COLOR
+        return theme.GHOST_COLORS[ghost.kind]
 
     def _draw_hud(self, buffer: Buffer, state: RenderGameState) -> None:
-        """Draw the HUD text; the strip is part of the cached backdrop."""
+        """Score line over the floor color; no solid strip behind it."""
         layout = self._layout
         text = (
             f"Score: {state.core.score}  Lives: {state.core.lives}  "
@@ -422,7 +474,7 @@ class Renderer:
             f"Time: {int(state.core.time_remaining)}"
         )
         self._facade.draw_text(
-            buffer, text, (4, layout.hud_top + 2), HUD_TEXT_COLOR
+            buffer, text, (20, layout.hud_top + 2), theme.HUD_TEXT_COLOR
         )
         if state.cheats.enabled:
             labels = ["Cheats ON"]
@@ -433,8 +485,8 @@ class Renderer:
             self._facade.draw_text(
                 buffer,
                 f"[{', '.join(labels)}]",
-                (4, layout.hud_top + layout.font_size + 2),
-                CHEAT_INDICATOR_COLOR,
+                (20, layout.hud_top + layout.font_size + 2),
+                theme.CHEAT_INDICATOR_COLOR,
             )
 
     # ---- screens (split out in refactor step 4) -------------------
@@ -456,31 +508,31 @@ class Renderer:
                 raise TypeError(
                     f"MAIN_MENU needs MainMenuPayload, got {type(payload)}"
                 )
-            self._facade.clear(frame, MENU_BACKGROUND)
+            self._facade.clear(frame, theme.MENU_BACKGROUND)
             self._draw_main_menu(frame, payload)
         elif app_state is AppState.PAUSED:
-            self._facade.clear(frame, PAUSE_BACKGROUND)
+            self._facade.clear(frame, theme.PAUSE_BACKGROUND)
             self._draw_paused(frame)
         elif app_state is AppState.VICTORY:
             if not isinstance(payload, VictoryPayload):
                 raise TypeError(
                     f"VICTORY needs VictoryPayload, got {type(payload)}"
                 )
-            self._facade.clear(frame, VICTORY_BACKGROUND)
+            self._facade.clear(frame, theme.VICTORY_BACKGROUND)
             self._draw_victory(frame, payload)
         elif app_state is AppState.GAME_OVER:
             if not isinstance(payload, GameOverPayload):
                 raise TypeError(
                     f"GAME_OVER needs GameOverPayload, got {type(payload)}"
                 )
-            self._facade.clear(frame, GAME_OVER_BACKGROUND)
+            self._facade.clear(frame, theme.GAME_OVER_BACKGROUND)
             self._draw_game_over(frame, payload)
         elif app_state is AppState.NAME_ENTRY:
             if not isinstance(payload, NameEntryPayload):
                 raise TypeError(
                     f"NAME_ENTRY needs NameEntryPayload, got {type(payload)}"
                 )
-            self._facade.clear(frame, SCREEN_BACKGROUND)
+            self._facade.clear(frame, theme.SCREEN_BACKGROUND)
             self._draw_name_entry(frame, payload)
         elif app_state is AppState.HIGHSCORES:
             if not isinstance(payload, HighscoresPayload):
@@ -488,66 +540,217 @@ class Renderer:
                     "HIGHSCORES needs HighscoresPayload, "
                     f"got {type(payload)}"
                 )
-            self._facade.clear(frame, SCREEN_BACKGROUND)
+            self._facade.clear(frame, theme.SCREEN_BACKGROUND)
             self._draw_highscores(frame, payload)
         elif app_state is AppState.INSTRUCTIONS:
-            self._facade.clear(frame, SCREEN_BACKGROUND)
+            self._facade.clear(frame, theme.SCREEN_BACKGROUND)
             self._draw_instructions(frame)
         else:
             return
         self._facade.blit(frame, (0, 0))
 
+    def _centered(
+        self,
+        buffer: Buffer,
+        text: str,
+        y: int,
+        color: Color,
+        font: str = "body",
+    ) -> int:
+        """Draw text centred on the window; returns its left x."""
+        width = self._layout.window_width
+        text_w, _h = self._facade.text_size(text, font)
+        x = (width - text_w) // 2
+        self._facade.draw_text(buffer, text, (x, y), color, font)
+        return x
+
     def _draw_main_menu(
         self, buffer: Buffer, payload: MainMenuPayload
     ) -> None:
-        """Title and the four menu entries, the selected one highlighted."""
-        step = self._layout.font_size + 12
-        self._facade.draw_text(
-            buffer, "Pac-Man", (20, 20), MENU_TITLE_COLOR
+        """Framed logo, sprite parade, big centred entries, top-3."""
+        layout = self._layout
+        font = layout.font_size
+        self._draw_frame(buffer)
+        y = 48
+        self._centered(buffer, "PAC-MAN", y, theme.MENU_TITLE_COLOR, "logo")
+        _lw, lh = self._facade.text_size("PAC-MAN", "logo")
+        y += lh + 8
+        self._centered(
+            buffer, "Ghosts! More ghosts!", y, theme.MENU_ITEM_COLOR
         )
-        start_y = 20 + self._layout.font_size + 24
+        y += font + 28
+        y = self._draw_parade(buffer, y)
+        step = font * 3 // 2 + 20
+        start_y = y + 36
+        marker_w, _h = self._facade.text_size("> ", "head")
         for index, item in enumerate(_MAIN_MENU_ORDER):
-            y = start_y + index * step
+            label = MAIN_MENU_LABELS[item]
+            row_y = start_y + index * step
             selected = index == payload.selected_index
-            color = MENU_SELECTED_COLOR if selected else MENU_ITEM_COLOR
-            prefix = "> " if selected else "  "
-            self._facade.draw_text(
-                buffer, prefix + MAIN_MENU_LABELS[item], (20, y), color
+            if selected:
+                color = theme.MENU_SELECTED_COLOR
+            else:
+                color = theme.MENU_ITEM_COLOR
+            x = self._centered(buffer, label, row_y, color, "head")
+            if selected:
+                self._facade.draw_text(
+                    buffer, ">", (x - marker_w - 8, row_y),
+                    theme.MENU_SELECTED_COLOR, "head",
+                )
+        best_y = start_y + len(_MAIN_MENU_ORDER) * step + 20
+        for rank, (name, score) in enumerate(payload.top[:3]):
+            self._centered(
+                buffer,
+                f"{rank + 1}. {name} - {score}",
+                best_y + rank * (font + 8),
+                theme.MENU_ITEM_COLOR,
             )
+        self._centered(
+            buffer,
+            "Arrows/WASD move  Enter select  v1.5",
+            layout.window_height - font - 24,
+            theme.MENU_ITEM_COLOR,
+        )
+
+    def _draw_frame(self, buffer: Buffer) -> None:
+        """Thin neon border inside the window edges."""
+        width = self._layout.window_width
+        height = self._layout.window_height
+        thick = max(3, self._layout.tile // 16)
+        inset = 12
+        self._fill_rect(
+            buffer, inset, inset,
+            width - 2 * inset, thick, theme.WALL_COLOR,
+        )
+        self._fill_rect(
+            buffer, inset, height - inset - thick,
+            width - 2 * inset, thick, theme.WALL_COLOR,
+        )
+        self._fill_rect(
+            buffer, inset, inset,
+            thick, height - 2 * inset, theme.WALL_COLOR,
+        )
+        self._fill_rect(
+            buffer, width - inset - thick, inset,
+            thick, height - 2 * inset, theme.WALL_COLOR,
+        )
+
+    def spawn_floater(
+        self, wx: float, wy: float, text: str, color: Color
+    ) -> None:
+        """Pop a score text above a world position; rises and expires."""
+        self._floaters.append((wx, wy, text, color, self._anim_t))
+
+    def _draw_floaters(self, buffer: Buffer) -> None:
+        """Rising score texts; expired ones are dropped here."""
+        alive = []
+        for wx, wy, text, color, born in self._floaters:
+            age = self._anim_t - born
+            if 0.0 <= age < 1.2:
+                alive.append((wx, wy, text, color, born))
+                x, y = self._layout.cell_origin(
+                    self._origin, wx, wy - age * 1.5
+                )
+                self._facade.draw_text(buffer, text, (x, y), color)
+        self._floaters = alive
+
+    def _draw_confetti(self, buffer: Buffer) -> None:
+        """Pixel shower over the victory screen.
+
+        Particles spawn at the top and fall with gravity, living
+        ~2.5 s each. Motion derives from the game clock, so pause
+        (which stops advance()) freezes the shower mid-air.
+        """
+        width = self._layout.window_width
+        height = self._layout.window_height
+        now = self._anim_t
+        alive = [p for p in self._confetti if now - p[4] < 2.5]
+        while len(alive) < 120:
+            alive.append((
+                self._confetti_rng.uniform(0, width),
+                -10.0,
+                self._confetti_rng.uniform(-40, 40),
+                self._confetti_rng.uniform(60, 160),
+                now - self._confetti_rng.uniform(0, 2.5),
+                self._confetti_rng.choice(_CONFETTI),
+            ))
+        self._confetti = alive
+        for x0, y0, vx, vy, born, color in alive:
+            age = now - born
+            x = int(x0 + vx * age)
+            y = int(y0 + vy * age + 220 * age * age / 2)
+            if 0 <= x < width and 0 <= y < height:
+                self._fill_rect(buffer, x, y, 5, 5, color)
+
+    def _draw_parade(self, buffer: Buffer, y: int) -> int:
+        """One row of sprites under the title; returns the row bottom.
+
+        Skipped silently when the tile set is missing (fallback).
+        """
+        names = [
+            "pm_right_1",
+            "ghost_0_1",
+            "ghost_1_1",
+            "ghost_2_1",
+            "ghost_3_1",
+            "dot_big",
+        ]
+        sprites = [self._sprite(n) for n in names]
+        if any(s is None for s in sprites):
+            return y
+        tile = self._layout.tile
+        x = (self._layout.window_width - len(sprites) * tile) // 2
+        for sprite in sprites:
+            assert sprite is not None
+            self._facade.blit(sprite, (x, y), dest=buffer)
+            x += tile
+        return y + tile
+
+    def _footer(self, buffer: Buffer, text: str) -> None:
+        """Bottom hint, centred."""
+        self._centered(
+            buffer,
+            text,
+            self._layout.window_height - self._layout.font_size - 24,
+            theme.MENU_ITEM_COLOR,
+        )
 
     def _draw_paused(self, buffer: Buffer) -> None:
         """Pause menu: title and the two options from VI.8."""
         step = self._layout.font_size + 10
-        self._facade.draw_text(
-            buffer, "Paused", (20, 20), PAUSE_TITLE_COLOR
+        self._draw_frame(buffer)
+        self._centered(buffer, "Paused", 48, theme.PAUSE_TITLE_COLOR, "head")
+        self._centered(
+            buffer, "P - Resume", 48 + step * 3, theme.PAUSE_ITEM_COLOR, "head"
         )
-        self._facade.draw_text(
-            buffer, "P - Resume", (20, 20 + step * 2), PAUSE_ITEM_COLOR
-        )
-        self._facade.draw_text(
+        self._centered(
             buffer,
             "Esc - Main Menu",
-            (20, 20 + step * 3),
-            PAUSE_ITEM_COLOR,
+            48 + step * 4,
+            theme.PAUSE_ITEM_COLOR,
+            "head",
         )
 
     def _draw_victory(self, buffer: Buffer, payload: VictoryPayload) -> None:
-        """Victory screen: title, final score, continue hint."""
+        """Victory screen: title, final score, confetti, continue hint."""
         step = self._layout.font_size + 10
-        self._facade.draw_text(
-            buffer, "You Win!", (20, 20), VICTORY_TITLE_COLOR
+        self._draw_frame(buffer)
+        self._draw_confetti(buffer)
+        self._centered(
+            buffer, "You Win!", 48, theme.VICTORY_TITLE_COLOR, "logo"
         )
-        self._facade.draw_text(
+        self._centered(
             buffer,
             f"Final Score: {payload.final_score}",
-            (20, 20 + step * 2),
-            VICTORY_TEXT_COLOR,
+            48 + step * 4,
+            theme.VICTORY_TEXT_COLOR,
+            "head",
         )
-        self._facade.draw_text(
+        self._centered(
             buffer,
             "Enter/Esc - Continue",
-            (20, 20 + step * 3),
-            VICTORY_TEXT_COLOR,
+            48 + step * 5,
+            theme.VICTORY_TEXT_COLOR,
         )
 
     def _draw_game_over(
@@ -555,20 +758,22 @@ class Renderer:
     ) -> None:
         """Game-over screen: title, final score, continue hint."""
         step = self._layout.font_size + 10
-        self._facade.draw_text(
-            buffer, "Game Over", (20, 20), GAME_OVER_TITLE_COLOR
+        self._draw_frame(buffer)
+        self._centered(
+            buffer, "Game Over", 48, theme.GAME_OVER_TITLE_COLOR, "logo"
         )
-        self._facade.draw_text(
+        self._centered(
             buffer,
             f"Final Score: {payload.final_score}",
-            (20, 20 + step * 2),
-            VICTORY_TEXT_COLOR,
+            48 + step * 4,
+            theme.VICTORY_TEXT_COLOR,
+            "head",
         )
-        self._facade.draw_text(
+        self._centered(
             buffer,
             "Enter/Esc - Continue",
-            (20, 20 + step * 3),
-            VICTORY_TEXT_COLOR,
+            48 + step * 5,
+            theme.VICTORY_TEXT_COLOR,
         )
 
     def _draw_name_entry(
@@ -576,24 +781,29 @@ class Renderer:
     ) -> None:
         """Name entry: title, the name typed so far with a cursor, hint."""
         step = self._layout.font_size + 10
-        self._facade.draw_text(
-            buffer, "Enter your name:", (20, 20), SCREEN_TITLE_COLOR
+        self._draw_frame(buffer)
+        self._centered(
+            buffer, "Enter your name:", 48, theme.SCREEN_TITLE_COLOR, "head"
         )
-        self._facade.draw_text(
-            buffer, payload.name + "_", (20, 20 + step * 2), SCREEN_TEXT_COLOR
+        self._centered(
+            buffer,
+            payload.name + "_",
+            48 + step * 3,
+            theme.SCREEN_TEXT_COLOR,
+            "head",
         )
-        self._facade.draw_text(
+        self._centered(
             buffer,
             "Enter to confirm  Esc to skip",
-            (20, 20 + step * 4),
-            SCREEN_TEXT_COLOR,
+            48 + step * 5,
+            theme.SCREEN_TEXT_COLOR,
         )
         if payload.cheated:
-            self._facade.draw_text(
+            self._centered(
                 buffer,
                 "(cheat run - score will not be saved)",
-                (20, 20 + step * 5),
-                SCREEN_TEXT_COLOR,
+                48 + step * 6,
+                theme.SCREEN_TEXT_COLOR,
             )
 
     def _draw_highscores(
@@ -601,32 +811,32 @@ class Renderer:
     ) -> None:
         """Top-10 list: rank, name, score."""
         step = self._layout.font_size + 10
-        title_y = 20
-        first_y = title_y + self._layout.font_size + 16
-        self._facade.draw_text(
-            buffer, "High Scores", (20, title_y), SCREEN_TITLE_COLOR
+        self._draw_frame(buffer)
+        self._centered(
+            buffer, "High Scores", 48, theme.SCREEN_TITLE_COLOR, "logo"
         )
+        first_y = 48 + self._layout.font_size * 2 + 24
         if not payload.entries:
-            self._facade.draw_text(
-                buffer, "(no scores yet)", (20, first_y), SCREEN_TEXT_COLOR
+            self._centered(
+                buffer, "(no scores yet)", first_y, theme.SCREEN_TEXT_COLOR
             )
         for index, (name, score) in enumerate(payload.entries[:10]):
-            line = f"{index + 1}. {name} - {score}"
-            self._facade.draw_text(
-                buffer, line, (20, first_y + index * step), SCREEN_TEXT_COLOR
+            self._centered(
+                buffer,
+                f"{index + 1}. {name} - {score}",
+                first_y + index * step,
+                theme.SCREEN_TEXT_COLOR,
             )
-        self._facade.draw_text(
-            buffer,
-            "Esc to return",
-            (20, self._layout.window_height - self._layout.font_size - 10),
-            SCREEN_TEXT_COLOR,
-        )
+        self._footer(buffer, "Esc to return")
 
     def _draw_instructions(self, buffer: Buffer) -> None:
         """Static controls reference (VI.8)."""
         step = self._layout.font_size + 10
+        self._draw_frame(buffer)
+        self._centered(
+            buffer, "Controls", 48, theme.SCREEN_TITLE_COLOR, "head"
+        )
         lines = [
-            "Controls:",
             "Arrows / WASD - Move",
             "P - Pause",
             "Enter / Space - Confirm",
@@ -634,11 +844,13 @@ class Renderer:
             "Cheats: 1 master, 2 invincible, 3 fast,",
             "4 skip level, 5 clear level,",
             "6 fright, 7 lose life",
-            "",
-            "Esc to return",
+            "T theme, G ghost party",
         ]
         for index, line in enumerate(lines):
-            color = SCREEN_TITLE_COLOR if index == 0 else SCREEN_TEXT_COLOR
-            self._facade.draw_text(
-                buffer, line, (20, 20 + index * step), color
+            self._centered(
+                buffer,
+                line,
+                48 + step * 2 + index * step,
+                theme.SCREEN_TEXT_COLOR,
             )
+        self._footer(buffer, "Esc to return")
