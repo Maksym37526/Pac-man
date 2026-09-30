@@ -17,7 +17,8 @@ def test_derived_sizes_stay_consistent(tile: int) -> None:
 def test_maze_is_centred_in_a_bigger_window() -> None:
     layout = make_layout(16, 21, 21)
     assert layout.maze_origin(21, 21) == (0, 0)
-    assert layout.maze_origin(15, 11) == ((21 - 15) * 16 // 2, (21 - 11) * 16 // 2)
+    expected = ((21 - 15) * 16 // 2, (21 - 11) * 16 // 2)
+    assert layout.maze_origin(15, 11) == expected
 
 
 def test_fit_prefers_largest_tile_that_fits() -> None:

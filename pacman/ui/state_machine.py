@@ -109,7 +109,7 @@ class AppStateMachine:
             self.name_buffer = ""
             self.state = AppState.NAME_ENTRY
 
-    def _handle_main_menu(self, event: InputEvent) -> None:
+    def _handle_main_menu(self, event: InputEvent | TypedChar) -> None:
         """Navigate and select among the four main menu entries."""
         if event is InputEvent.UP:
             self.menu_index = (self.menu_index - 1) % len(_MAIN_MENU_ORDER)
@@ -129,17 +129,21 @@ class AppStateMachine:
         elif item is MainMenuItem.EXIT:
             self.state = AppState.EXIT
 
-    def _handle_instructions(self, event: InputEvent) -> None:
+    def _handle_instructions(
+        self, event: InputEvent | TypedChar
+    ) -> None:
         """Only BACK does anything here: return to the main menu."""
         if event is InputEvent.BACK:
             self.state = AppState.MAIN_MENU
 
-    def _handle_highscores(self, event: InputEvent) -> None:
+    def _handle_highscores(
+        self, event: InputEvent | TypedChar
+    ) -> None:
         """Only BACK does anything here: return to the main menu."""
         if event is InputEvent.BACK:
             self.state = AppState.MAIN_MENU
 
-    def _handle_playing(self, event: InputEvent) -> None:
+    def _handle_playing(self, event: InputEvent | TypedChar) -> None:
         """Pause on PAUSE or BACK; movement is core's job.
 
         Escape arrives as BACK (translate is stateless, §5), so
@@ -148,7 +152,7 @@ class AppStateMachine:
         if event is InputEvent.PAUSE or event is InputEvent.BACK:
             self.state = AppState.PAUSED
 
-    def _handle_paused(self, event: InputEvent) -> None:
+    def _handle_paused(self, event: InputEvent | TypedChar) -> None:
         """Resume on PAUSE, abandon the run on BACK (VI.8 pause menu)."""
         if event is InputEvent.PAUSE:
             self.state = AppState.PLAYING
@@ -201,7 +205,7 @@ class AppStateMachine:
         """
         return NameEntryPayload(name=self.name_buffer, cheated=cheated)
 
-    def _handle_game_over(self, event: InputEvent) -> None:
+    def _handle_game_over(self, event: InputEvent | TypedChar) -> None:
         """Confirm/back moves to NAME_ENTRY, same flow as victory."""
         if event is InputEvent.SELECT or event is InputEvent.BACK:
             self.name_buffer = ""

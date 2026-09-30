@@ -10,8 +10,9 @@ from random import Random
 from pacman.core.cheats import CheatCommand
 from pacman.core.collision import world_position
 from pacman.core.events import GameEvent
+from pacman.core.session import Session
 from pacman.data.cli import parse
-from pacman.data.config import build_config
+from pacman.data.config import Config, build_config
 from pacman.data.loader import read_config, strip_comments, parse_json
 from pacman.data.validator import validate_config
 from pacman.errors import ConfigError
@@ -24,7 +25,11 @@ from pacman.render.view_state import RenderGameState
 from pacman.render.renderer import Renderer
 from pacman.ui.events import InputEvent, translate
 from pacman.ui.state_machine import (
-    AppState, AppStateMachine, GameOverPayload, HighscoresPayload, VictoryPayload,
+    AppState,
+    AppStateMachine,
+    GameOverPayload,
+    HighscoresPayload,
+    VictoryPayload,
 )
 from pacman.game import load_highscores, new_game, save_score
 
@@ -45,7 +50,7 @@ _CHEAT_BY_INPUT: dict[InputEvent, CheatCommand] = {
 }
 
 
-def start_run(config, rng: Random):
+def start_run(config: Config, rng: Random) -> Session:
     """Build a fresh Session: core owns levels, score and lives now.
 
     Playtest tuning (matrix open point #2): defaults (8/7/4)
@@ -79,7 +84,12 @@ def main() -> None:
     max_cols = max(level.width for level in config.levels)
     max_rows = max(level.height for level in config.levels)
     layout = fit_layout(max_cols, max_rows)
-    facade = GraphicsFacade(layout.window_width, layout.window_height, title="Pac-Man", font_size=layout.font_size)
+    facade = GraphicsFacade(
+        layout.window_width,
+        layout.window_height,
+        title="Pac-Man",
+        font_size=layout.font_size,
+    )
     renderer = Renderer(facade, layout)
     machine = AppStateMachine()
 
@@ -118,7 +128,10 @@ def main() -> None:
                     )
                 machine.confirmed_name = None
 
-            if prev_state is AppState.MAIN_MENU and machine.state is AppState.PLAYING:
+            if (
+                prev_state is AppState.MAIN_MENU
+                and machine.state is AppState.PLAYING
+            ):
                 # Fresh run on every START_GAME: the old session is
                 # finished (lives spent) or mid-run (abandoned pause).
                 session = start_run(config, Random(config.seed))
@@ -126,11 +139,15 @@ def main() -> None:
                 level_prepared = False
                 continue
 
-            if machine.state is AppState.PLAYING and isinstance(event, InputEvent):
+            if (
+                machine.state is AppState.PLAYING
+                and isinstance(event, InputEvent)
+            ):
                 if event in _DIRECTION_BY_INPUT:
                     session.set_direction(_DIRECTION_BY_INPUT[event])
                 elif event in _CHEAT_BY_INPUT:
-                    for game_event in session.apply_cheat(_CHEAT_BY_INPUT[event]):
+                    cheat = _CHEAT_BY_INPUT[event]
+                    for game_event in session.apply_cheat(cheat):
                         if game_event is GameEvent.GAME_OVER:
                             machine.state = AppState.GAME_OVER
                         elif game_event is GameEvent.GAME_WON:
@@ -153,18 +170,25 @@ def main() -> None:
             renderer.draw_screen(AppState.PAUSED, None)
         elif machine.state is AppState.VICTORY:
             renderer.advance(dt)  # drives the confetti shower
-            renderer.draw_screen(AppState.VICTORY, VictoryPayload(final_score=session.level.score))
+            victory_payload = VictoryPayload(
+                final_score=session.level.score
+            )
+            renderer.draw_screen(AppState.VICTORY, victory_payload)
             # Auto-transition to NAME_ENTRY after a short delay or on keypress
             # For now, we'll transition on next event
         elif machine.state is AppState.GAME_OVER:
-            renderer.draw_screen(AppState.GAME_OVER, GameOverPayload(final_score=session.level.score))
+            over_payload = GameOverPayload(final_score=session.level.score)
+            renderer.draw_screen(AppState.GAME_OVER, over_payload)
         elif machine.state is AppState.NAME_ENTRY:
             renderer.draw_screen(
                 AppState.NAME_ENTRY,
                 machine.name_entry_payload(cheated=session.cheats_used),
             )
         elif machine.state is AppState.HIGHSCORES:
-            renderer.draw_screen(AppState.HIGHSCORES, HighscoresPayload(entries=[(e.name, e.score) for e in highscore_entries]))
+            entries = [(e.name, e.score) for e in highscore_entries]
+            renderer.draw_screen(
+                AppState.HIGHSCORES, HighscoresPayload(entries=entries)
+            )
         elif machine.state is AppState.INSTRUCTIONS:
             renderer.draw_screen(AppState.INSTRUCTIONS, None)
         elif machine.state is AppState.PLAYING:

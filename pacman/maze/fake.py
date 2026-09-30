@@ -14,6 +14,7 @@ error paths can be exercised at all.
 
 from collections.abc import Collection, Iterable, Sequence
 
+from pacman.maze.model import Cell, Direction, Maze
 from pacman.maze.source import (
     ALL_WALLS,
     WALL_E,
@@ -260,8 +261,8 @@ class FailingFactory:
 
 def as_rows(grid: Sequence[Sequence[int]]) -> str:
     """Render a grid as aligned numbers, for readable test failures."""
-    return "\n".join(" ".join(f"{value:2d}" for value in row)
-                     for row in grid)
+    lines = [" ".join(f"{value:2d}" for value in row) for row in grid]
+    return "\n".join(lines)
 
 
 class NoisyFactory:
@@ -282,10 +283,9 @@ class NoisyFactory:
 
 # For render only!
 
-from pacman.maze.model import Cell, Direction, Maze
 
 def tiny_maze() -> Maze:
-    """3x3 open maze, centre cell blocked — enough to exercise walls + blocks."""
+    """3x3 open maze, centre cell blocked — enough for walls."""
     width, height = 3, 3
     all_cells = [Cell(c, r) for r in range(height) for c in range(width)]
     passages: dict[Cell, frozenset[Direction]] = {}
@@ -295,7 +295,10 @@ def tiny_maze() -> Maze:
         open_dirs = set()
         for d in Direction:
             neighbour = Cell(cell.col + d.vector_x, cell.row + d.vector_y)
-            in_bounds = 0 <= neighbour.col < width and 0 <= neighbour.row < height
+            in_bounds = (
+                0 <= neighbour.col < width
+                and 0 <= neighbour.row < height
+            )
             if in_bounds and neighbour != Cell(1, 1):
                 open_dirs.add(d)
         passages[cell] = frozenset(open_dirs)
