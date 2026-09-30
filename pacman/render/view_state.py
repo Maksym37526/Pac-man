@@ -12,8 +12,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from pacman.core.cheats import CheatState
 from pacman.core.state import GameState
-from pacman.ui.cheats import CheatState
 
 
 @dataclass

@@ -107,6 +107,20 @@ def advance(
         entity.prev_cell = entity.cell
         entity.cell = step(entity.cell, wanted)
         entity.direction = wanted
+    elif (
+        entity.next_direction is entity.direction.opposite
+        and 0.0 < entity.progress < 1.0
+    ):
+        # Instant 180° reversal, classic feel: finish the cell
+        # first and turning feels laggy (up to a full cell at
+        # low speed). Swap the segment and mirror progress, so
+        # the position is unchanged and travel continues back.
+        # At exact boundaries (progress 0) the commit logic
+        # below already turns with no delay, so only mid-cell
+        # reversals need this.
+        entity.prev_cell, entity.cell = entity.cell, entity.prev_cell
+        entity.progress = 1.0 - entity.progress
+        entity.direction = entity.next_direction
     entity.progress += speed * dt
     while entity.progress >= 1.0:
         entity.progress -= 1.0

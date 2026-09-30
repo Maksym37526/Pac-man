@@ -30,11 +30,13 @@ class InputEvent(Enum):
     PAUSE = auto()
     QUIT = auto()
     TEXT_BACKSPACE = auto()
-    CHEAT_INVINCIBILITY = auto()
-    CHEAT_LEVEL_SKIP = auto()
-    CHEAT_GHOST_FREEZE = auto()
-    CHEAT_EXTRA_LIFE = auto()
-    CHEAT_SPEED = auto()
+    CHEAT_MASTER = auto()
+    CHEAT_INVINCIBLE = auto()
+    CHEAT_FAST = auto()
+    CHEAT_SKIP = auto()
+    CHEAT_CLEAR = auto()
+    CHEAT_FRIGHT = auto()
+    CHEAT_LOSE = auto()
 
 
 _KEY_MAP: dict[str, InputEvent] = {
@@ -46,11 +48,19 @@ _KEY_MAP: dict[str, InputEvent] = {
     "escape": InputEvent.BACK,
     "p": InputEvent.PAUSE,
     "backspace": InputEvent.TEXT_BACKSPACE,
-    "f1": InputEvent.CHEAT_INVINCIBILITY,
-    "f2": InputEvent.CHEAT_LEVEL_SKIP,
-    "f3": InputEvent.CHEAT_GHOST_FREEZE,
-    "f4": InputEvent.CHEAT_EXTRA_LIFE,
-    "f5": InputEvent.CHEAT_SPEED,
+    # Cyrillic homologs (JCUKEN): same physical keys with a
+    # Russian layout active. Name entry is unaffected: printable
+    # unicode wins over this map there, so letters still type.
+    "ц": InputEvent.UP, "ф": InputEvent.LEFT,
+    "ы": InputEvent.DOWN, "в": InputEvent.RIGHT,
+    "з": InputEvent.PAUSE,
+    "1": InputEvent.CHEAT_MASTER,
+    "2": InputEvent.CHEAT_INVINCIBLE,
+    "3": InputEvent.CHEAT_FAST,
+    "4": InputEvent.CHEAT_SKIP,
+    "5": InputEvent.CHEAT_CLEAR,
+    "6": InputEvent.CHEAT_FRIGHT,
+    "7": InputEvent.CHEAT_LOSE,
 }
 
 

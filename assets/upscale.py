@@ -8,10 +8,12 @@ tile size. The game itself never scales: it only blits these files
 Sheets (all multiples of their base cell):
   PacManAssets-PacMan.png  32px cells, 4x3
     row 0: RIGHT  closed/slit, mid, wide, full
-    row 1: LEFT   closed, mid, wide + U/D closed pill (col 3)
+    row 1: NOT left mouths (pixel-verified: mouths face right,
+      plus a vertical pill); skipped, renderer uses neutral
     row 2: death  shrink, dot, burst
   PacManAssets-Ghosts.png  32px cells, 4x11
-    rows 0-1 red, 2-3 blue, 4-5 pink, 6-7 orange (+ spare rows)
+    one row per color: 0 red, 1 blue, 2 pink, 3 orange
+    (+ spare rows 4-7 unused for now)
     row 8 frightened, row 9 fright-blink, row 10 eyes+faces
       (top half of each row-10 cell: directional eyes)
   PacManAssets-Items.png   16px cells, 8x2
@@ -42,10 +44,6 @@ FRAMES: list[tuple[str, int, int, int, str]] = [
     ("PacManAssets-PacMan.png", BASE_PM, 1, 0, "pm_right_1.png"),
     ("PacManAssets-PacMan.png", BASE_PM, 2, 0, "pm_right_2.png"),
     ("PacManAssets-PacMan.png", BASE_PM, 3, 0, "pm_right_3.png"),
-    ("PacManAssets-PacMan.png", BASE_PM, 0, 1, "pm_left_0.png"),
-    ("PacManAssets-PacMan.png", BASE_PM, 1, 1, "pm_left_1.png"),
-    ("PacManAssets-PacMan.png", BASE_PM, 2, 1, "pm_left_2.png"),
-    ("PacManAssets-PacMan.png", BASE_PM, 3, 1, "pm_vert.png"),
     ("PacManAssets-PacMan.png", BASE_PM, 0, 2, "pm_death_0.png"),
     ("PacManAssets-PacMan.png", BASE_PM, 1, 2, "pm_death_1.png"),
     ("PacManAssets-PacMan.png", BASE_PM, 2, 2, "pm_death_2.png"),
@@ -54,9 +52,10 @@ FRAMES: list[tuple[str, int, int, int, str]] = [
     ("PacManAssets-Items.png", BASE_DOT, 1, 1, "dot_big.png"),
 ]
 
-# Ghost body colors: (kind_index, base_row). Kind order follows
-# GHOST_COLORS: GHOST_1 red, GHOST_2 pink, GHOST_3 blue/cyan, GHOST_4 orange.
-GHOST_ROWS = {0: 0, 1: 4, 2: 2, 3: 6}
+# Ghost body colors: (kind_index, sheet row). One row per color,
+# four wave phases across the columns. Kind order follows
+# GHOST_COLORS: GHOST_1 red, GHOST_2 pink, GHOST_3 blue, GHOST_4 orange.
+GHOST_ROWS = {0: 0, 1: 2, 2: 1, 3: 3}
 
 # (sheet, base_cell, col, row, half, out_name); half top/bottom for eyes.
 GHOST_EXTRA: list[tuple[str, int, int, int, str, str]] = [
@@ -94,18 +93,17 @@ def main(tile: int) -> None:
     jobs: list[tuple[str, int, int, int, str, str]] = [
         (s, c, x, y, "full", n) for (s, c, x, y, n) in FRAMES
     ] + GHOST_EXTRA
-    # Ghost bodies: 8 frames (2 rows x 4 cols) per color.
-    for kind, base_row in GHOST_ROWS.items():
-        for i in range(8):
-            r, col = base_row + i // 4, i % 4
+    # Ghost bodies: 4 wave phases (one row) per color.
+    for kind, row in GHOST_ROWS.items():
+        for col in range(4):
             jobs.append(
                 (
                     "PacManAssets-Ghosts.png",
                     BASE_PM,
                     col,
-                    r,
+                    row,
                     "full",
-                    f"ghost_{kind}_{i}.png",
+                    f"ghost_{kind}_{col}.png",
                 )
             )
 

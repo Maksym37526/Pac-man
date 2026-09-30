@@ -23,6 +23,7 @@ class GameOverPayload:
 class NameEntryPayload:
     """What draw_screen needs to draw the name-entry screen."""
     name: str
+    cheated: bool = False
 
 
 @dataclass(frozen=True)
@@ -189,9 +190,14 @@ class AppStateMachine:
             self.name_buffer = ""
             self.state = AppState.MAIN_MENU
 
-    def name_entry_payload(self) -> NameEntryPayload:
-        """Snapshot of the name currently being typed."""
-        return NameEntryPayload(name=self.name_buffer)
+    def name_entry_payload(self, cheated: bool = False) -> NameEntryPayload:
+        """Snapshot of the name currently being typed.
+
+        Args:
+            cheated: True when the run used cheats and the score
+                will not be saved (set by the composer).
+        """
+        return NameEntryPayload(name=self.name_buffer, cheated=cheated)
 
     def _handle_game_over(self, event: InputEvent) -> None:
         """Confirm/back moves to NAME_ENTRY, same flow as victory."""

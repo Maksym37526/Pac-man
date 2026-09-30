@@ -49,7 +49,6 @@ from pacman.render.theme import (
     WALL_COLOR,
 )
 from pacman.render.view_state import RenderGameState
-from pacman.ui.cheats import CHEAT_LABELS
 from pacman.ui.state_machine import (
     MAIN_MENU_LABELS,
     AppState,
@@ -91,6 +90,7 @@ class Renderer:
             / f"tile{layout.tile}"
         )
         self._last_dir: dict[EntityKind, Direction] = {}
+        self._last_xy: dict[EntityKind, tuple[int, int]] = {}
         # Game-time clock for sprite animation. Advanced explicitly
         # via advance(), which the main loop calls only with the same
         # dt it feeds tick() — so pause freezes mouths and blinking
@@ -318,18 +318,28 @@ class Renderer:
             return entity.direction
         return self._last_dir.get(entity.kind)
 
+    # Mouth frames. The sheet ships RIGHT mouths only; LEFT/UP/DOWN
+    # rows (same 4-phase layout, 32px cells, pm_left_*/pm_up_*/pm_down_*
+    # names) plug into _draw_player once the artist adds them.
+    _PM_RIGHT = (
+        "pm_right_0",
+        "pm_right_1",
+        "pm_right_2",
+        "pm_right_3",
+    )
+    _PM_CLOSED = "pm_right_3"
+
     def _draw_player(self, buffer: Buffer, player: Entity) -> None:
-        """Animated Pac-Man: mouth faces travel direction."""
-        facing = self._facing(player)
-        phase = int(self._anim_t * 8) % 4
-        if facing is Direction.LEFT:
-            names = ["pm_left_0", "pm_left_1", "pm_left_2", "pm_right_3"]
-        elif facing in (Direction.UP, Direction.DOWN):
-            names = ["pm_vert", "pm_right_1", "pm_vert", "pm_right_3"]
-        else:
-            names = ["pm_right_0", "pm_right_1", "pm_right_2", "pm_right_3"]
-        sprite = self._sprite(names[phase])
+        """Visible chomp while walking (5 Hz), closed mouth when idle."""
         x, y = self._entity_xy(player)
+        moving = (x, y) != self._last_xy.get(player.kind)
+        self._last_xy[player.kind] = (x, y)
+        self._facing(player)  # remember last nonzero direction
+        if moving:
+            name = self._PM_RIGHT[int(self._anim_t * 5) % 4]
+        else:
+            name = self._PM_CLOSED
+        sprite = self._sprite(name)
         if sprite is None:
             margin = self._layout.entity_margin
             size = self._layout.tile - 2 * margin
@@ -348,7 +358,7 @@ class Renderer:
             kind_index = GHOST_KINDS.index(ghost.kind)
         except ValueError:
             kind_index = 0
-        phase = int(self._anim_t * 8) % 8
+        phase = int(self._anim_t * 8) % 4
         x, y = self._entity_xy(ghost)
         if ghost.mode is EntityMode.EATEN:
             eye = self._EYE_BY_DIR.get(self._facing(ghost), 1)
@@ -414,11 +424,15 @@ class Renderer:
         self._facade.draw_text(
             buffer, text, (4, layout.hud_top + 2), HUD_TEXT_COLOR
         )
-        if state.cheats.active:
-            labels = ", ".join(CHEAT_LABELS[k] for k in state.cheats.active)
+        if state.cheats.enabled:
+            labels = ["Cheats ON"]
+            if state.cheats.invincible:
+                labels.append("Invincible")
+            if state.cheats.fast:
+                labels.append("Fast x2")
             self._facade.draw_text(
                 buffer,
-                f"[{labels}]",
+                f"[{', '.join(labels)}]",
                 (4, layout.hud_top + layout.font_size + 2),
                 CHEAT_INDICATOR_COLOR,
             )
@@ -574,6 +588,13 @@ class Renderer:
             (20, 20 + step * 4),
             SCREEN_TEXT_COLOR,
         )
+        if payload.cheated:
+            self._facade.draw_text(
+                buffer,
+                "(cheat run - score will not be saved)",
+                (20, 20 + step * 5),
+                SCREEN_TEXT_COLOR,
+            )
 
     def _draw_highscores(
         self, buffer: Buffer, payload: HighscoresPayload
@@ -610,7 +631,9 @@ class Renderer:
             "P - Pause",
             "Enter / Space - Confirm",
             "Esc - Back",
-            "F1-F5 - Cheats (invincibility, skip, freeze, extra life, speed)",
+            "Cheats: 1 master, 2 invincible, 3 fast,",
+            "4 skip level, 5 clear level,",
+            "6 fright, 7 lose life",
             "",
             "Esc to return",
         ]
