@@ -1,5 +1,6 @@
 """Tests for cheat mode: pacman.core.cheats and Session cheats."""
 
+from dataclasses import replace
 from random import Random
 
 from pacman.core.cheats import (
@@ -284,3 +285,42 @@ def test_ten_skips_win_the_run() -> None:
     assert GameEvent.GAME_WON in events
     assert session.finished
     assert session.won
+
+
+def test_clear_level_credits_dots() -> None:
+    """CLEAR_LEVEL pays for every dot it removes, like honest play."""
+    session = make_session()
+    enable(session)
+    session.level.pacgums = {Cell(0, 0), Cell(1, 1)}
+    session.level.super_pacgums = {Cell(2, 2)}
+    events = session.apply_cheat(CheatCommand.CLEAR_LEVEL)
+    assert GameEvent.LEVEL_CLEARED in events
+    assert session.level.score == 2 * 10 + 50
+
+
+def test_frozen_ghosts_hold_position() -> None:
+    """Frozen ghosts do not advance while the clock still runs."""
+    session = make_session()
+    session.settings = replace(session.settings, ghost_speed=5.0)
+    enable(session)
+    session.tick(0.2)
+    session.apply_cheat(CheatCommand.TOGGLE_FROZEN)
+    assert session.cheats.frozen
+    before = [
+        (g.cell, g.prev_cell, g.progress) for g in session.level.ghosts
+    ]
+    session.tick(0.5)
+    after = [
+        (g.cell, g.prev_cell, g.progress) for g in session.level.ghosts
+    ]
+    assert before == after
+    session.apply_cheat(CheatCommand.TOGGLE_FROZEN)
+    assert not session.cheats.frozen
+
+
+def test_extra_life_adds_one() -> None:
+    """EXTRA_LIFE is LOSE_LIFE mirrored, with no events attached."""
+    session = make_session()
+    enable(session)
+    assert session.apply_cheat(CheatCommand.EXTRA_LIFE) == []
+    assert session.level.lives == 4

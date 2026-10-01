@@ -50,17 +50,19 @@ operations below. Each one has a documented MLX counterpart.
 | Facade operation | pygame call | MLX equivalent |
 |---|---|---|
 | Initialise the graphics context | `pygame.init` | `mlx_init` |
-| Create a window | `pygame.display.set_mode` | `mlx_new_window` |
+| Create a window (title included) | `pygame.display.set_mode` + `set_caption` | `mlx_new_window` (takes the title itself) |
 | Destroy the window / shut down | `pygame.quit` | `mlx_destroy_window` |
 | Create an off-screen image buffer | `pygame.Surface` | `mlx_new_image` |
 | Write a single pixel into a buffer | `Surface.set_at` | `mlx_pixel_put` |
 | Clear a surface to a single colour | `Surface.fill` | `mlx_clear_window` |
 | Blit a buffer into the window | `Surface.blit` | `mlx_put_image_to_window` |
-| Load an image from a file | `pygame.image.load` | `mlx_png_file_to_image` |
+| Blit a buffer into another buffer | `Surface.blit` with `dest` | composing images in memory before the single window put; same primitive, other target |
+| Push the frame to the screen | `pygame.display.flip` | the loop hook presenting the frame (`mlx_loop` / `mlx_loop_hook`) |
+| Load an image from a file, keep transparency | `pygame.image.load` + `convert_alpha` | `mlx_png_file_to_image` (images carry alpha either way; without it sprites get black boxes, so no game could ship sprites under either library) |
 | Draw a text string | `Font.render` + `blit` | `mlx_string_put` |
-| Receive key events | iterate `pygame.event.get()` | `mlx_key_hook` / `mlx_hook` |
-| Extra font sizes/families | `SysFont` with other size/family args | same call, creation params (confirm with staff) |
-| Measure a string | `Font.size` via the facade | bookkeeping for centering, draws nothing (confirm with staff) |
+| Extra font sizes/families | `SysFont` with other size/family args | same call, creation params; MLX42 scales put strings the same way |
+| Measure a string | `Font.size` via the facade | bookkeeping for centering, draws nothing |
+| Receive key events | iterate `pygame.event.get()`, identify keys with `key.name` | `mlx_key_hook` / `mlx_hook` (a hook is useless without knowing which key fired) |
 | Receive the window-close event | `QUIT` event | `mlx_hook` (destroy event) |
 | Advance the main loop | our own loop | `mlx_loop` / `mlx_loop_hook` |
 
@@ -93,6 +95,16 @@ module must return nothing. The rule gives us three things — a single file to
 present at the defense as the complete list of primitives in use, the ability
 to swap the backend without touching game logic, and the guarantee that the
 excluded list above cannot be violated by accident.
+
+Two deliberate exceptions to the letter of the grep, both outside the game:
+
+- `assets/upscale.py` imports pygame to slice and upscale sprite sheets
+  **offline, at authoring time**. It never runs inside the game (the committed
+  `assets/gen/` frames are loaded 1:1 via `load_image`), so it cannot add a
+  runtime primitive through the back door.
+- `facade.draw_text` calls `buffer.blit` directly instead of the `blit()`
+  wrapper: same call, same target semantics, kept local to avoid re-wrapping
+  a one-liner.
 
 ## Consequences for the design
 

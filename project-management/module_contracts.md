@@ -317,20 +317,22 @@ honest play. The full cheat-to-requirement mapping lives in
 the matrix (REQ-098).
 
 `CheatState` (frozen) holds the toggles: `enabled` (master
-switch), `invincible`, `fast`. `CheatCommand` names the seven
-inputs: `TOGGLE_CHEATS`, `TOGGLE_INVINCIBLE`, `TOGGLE_SPEED`,
-`SKIP_LEVEL`, `CLEAR_LEVEL`, `START_FRIGHT`, `LOSE_LIFE`.
+switch), `invincible`, `fast`, `frozen`. `CheatCommand` names the
+nine inputs: `TOGGLE_CHEATS`, `TOGGLE_INVINCIBLE`, `TOGGLE_SPEED`,
+`TOGGLE_FROZEN`, `SKIP_LEVEL`, `CLEAR_LEVEL`, `START_FRIGHT`,
+`LOSE_LIFE`, `EXTRA_LIFE`.
 
 What each command does:
 
 | Command | Effect | Reuses |
 |---|---|---|
 | `TOGGLE_CHEATS` | flips the master switch; raising it also raises `cheats_used` forever | — |
-| `TOGGLE_INVINCIBLE` / `TOGGLE_SPEED` | flips one toggle via `replace` | — |
+| `TOGGLE_INVINCIBLE` / `TOGGLE_SPEED` / `TOGGLE_FROZEN` | flips one toggle via `replace` | — |
 | `SKIP_LEVEL` | jumps to the next level (`GAME_WON` on the last), emitting `LEVEL_CLEARED` | `Session._on_level_cleared` |
-| `CLEAR_LEVEL` | empties both dot sets, emits `LEVEL_CLEARED`, then the same transition | `Session._on_level_cleared` |
+| `CLEAR_LEVEL` | credits every remaining dot, empties both dot sets, emits `LEVEL_CLEARED`, then the same transition | `Session._on_level_cleared` |
 | `START_FRIGHT` | edible ghosts now, emits `FRIGHT_STARTED` | `rules.start_fright` |
 | `LOSE_LIFE` | −1 life, everybody home (`GAME_OVER` on the last) | `rules.respawn_after_catch` |
+| `EXTRA_LIFE` | +1 life, returns `[]` (HUD shows it next frame) | — |
 
 Rules that must never surprise B:
 
@@ -352,6 +354,8 @@ Rules that must never surprise B:
   fires. `fast` doubles the player speed only
   (`CHEAT_SPEED_FACTOR = 2.0`), via a replaced `GameSettings`;
   with cheats off the very same settings object is reused.
+  `frozen` holds ghosts in place (no advance, no AI turns);
+  timers, eating and collisions run on.
 - `cheats_used`, once raised, never lowers. A tainted run must
   not store its score: show the name screen anyway (REQ-110,
   REQ-123), but skip `save_score`. The skipping itself lives
@@ -371,6 +375,8 @@ final choice; digits avoid WASD, arrows and name entry):
 | `5` | `CLEAR_LEVEL` |
 | `6` | `START_FRIGHT` |
 | `7` | `LOSE_LIFE` |
+| `8` | `TOGGLE_FROZEN` |
+| `9` | `EXTRA_LIFE` |
 
 ---
 

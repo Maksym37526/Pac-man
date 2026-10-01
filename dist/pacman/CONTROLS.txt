@@ -1,0 +1,40 @@
+PAC-MAN v1.5 — Ghosts! More ghosts!
+
+LAUNCH
+  ./run.sh
+  (or: python3 pac-man.py config.json — needs Python 3.10+)
+
+MENU
+  Arrows/WASD ......... navigate / move (Cyrillic layout works too)
+  Enter/Space ......... confirm
+  Esc ................. back
+
+GAME
+  Arrows/WASD ......... move (4 directions, no diagonals)
+  P or Esc ............ pause (P resumes, Esc abandons to menu)
+
+CHEATS (reviewer shortcuts)
+  1 ................... master switch (required first; marks the
+                        run — cheated scores are never saved)
+  2 ................... invincibility (ghosts can't catch you)
+  3 ................... double speed
+  4 ................... skip level
+  5 ................... clear level (eat all dots, honest win)
+  6 ................... fright now (edible ghosts)
+  7 ................... lose a life (reach Game Over fast)
+  8 ................... freeze ghosts (they hold position)
+  9 ................... extra life (+1 life)
+
+FUN
+  T ................... cycle color theme (10 total)
+  G ................... ghost party (color shuffle + disco walls)
+
+HIGHSCORES
+  Top 10 with names, stored in highscores.json next to the game.
+  Names: ASCII letters/digits/spaces, max 10 chars.
+  After win or game over, type a name + Enter to save (Esc skips).
+
+CONFIG
+  config.json — lives, pacgum count, points, seed, level sizes,
+  time limit, highscore file. Bad values are clamped with a
+  warning; the game never crashes on a bad config.
