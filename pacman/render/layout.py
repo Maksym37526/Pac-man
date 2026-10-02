@@ -17,7 +17,7 @@ There is no scaling primitive (see graphics_library.md), so sprites
 cannot be stretched: each size needs its own pre-made set.
 """
 
-WINDOW_BUDGET: tuple[int, int] = (4000, 4000)
+WINDOW_BUDGET: tuple[int, int] = (1920, 1080)
 """Largest window (width, height) we aim for, in pixels."""
 
 MIN_TILE = 8

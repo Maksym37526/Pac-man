@@ -22,8 +22,8 @@ Sheets (all multiples of their base cell):
 
 Usage:
     python3 assets/upscale.py [tile]
-Default tile is 64 (must divide evenly into the upscale factor:
-32px cells need an even tile, 16px cells a multiple of 16).
+Default tile is 64. Any tile >= 8 works: nearest-neighbor sampling,
+no blending, so pixel-art stays sharp.
 """
 
 from __future__ import annotations
@@ -71,16 +71,22 @@ GHOST_EXTRA: list[tuple[str, int, int, int, str, str]] = [
 ]
 
 
-def _upscale(surf: pygame.Surface, factor: int) -> pygame.Surface:
-    """Exact pixel replication, no blending."""
-    w, h = surf.get_size()
-    out = pygame.Surface((w * factor, h * factor), pygame.SRCALPHA)
-    for y in range(h):
-        for x in range(w):
-            out.fill(
-                surf.get_at((x, y)),
-                (x * factor, y * factor, factor, factor),
-            )
+def _resize_nearest(surf: pygame.Surface, target_w: int, target_h: int) -> pygame.Surface:
+    """Nearest-neighbor resize to an arbitrary tile size, no blending.
+
+    Old code did exact replication (factor = tile // base) which only
+    works when tile is a multiple of base. For tile48/24 (32px base)
+    it produced wrong-size or empty images. This maps each output
+    pixel to src[x * src_w // target_w, y * src_h // target_h],
+    so pixel-art stays sharp for any tile >= 8.
+    """
+    src_w, src_h = surf.get_size()
+    out = pygame.Surface((target_w, target_h), pygame.SRCALPHA)
+    for y in range(target_h):
+        sy = y * src_h // target_h
+        for x in range(target_w):
+            sx = x * src_w // target_w
+            out.set_at((x, y), surf.get_at((sx, sy)))
     return out
 
 
@@ -115,22 +121,18 @@ def main(tile: int) -> None:
                 str(ASSETS / sheet)
             ).convert_alpha()
         src = cache[sheet]
-        if base == BASE_PM and tile % 2:
-            raise ValueError(
-                f"tile {tile} breaks 32px cells (need even)"
-            )
-        if base == BASE_DOT and tile % 16:
-            raise ValueError(
-                f"tile {tile} breaks 16px cells (need multiple of 16)"
-            )
-        factor = tile // base
+        if tile < 8:
+            raise ValueError(f"tile {tile} is below minimum 8")
         h = base // 2 if half == "top" else base
         cell = pygame.Surface((base, h), pygame.SRCALPHA)
         y0 = row * base
         for y in range(h):
             for x in range(base):
                 cell.set_at((x, y), src.get_at((col * base + x, y0 + y)))
-        pygame.image.save(_upscale(cell, factor), str(dest / name))
+        target_h = tile // 2 if half == "top" else tile
+        pygame.image.save(
+            _resize_nearest(cell, tile, target_h), str(dest / name)
+        )
     print(f"wrote {len(jobs)} frames to {dest}")
 
 
