@@ -29,8 +29,6 @@ The set of available primitives is the same in both implementations.
 
 ## Rationale
 
-## Rationale
-
 pygame is installable through pip, ships prebuilt wheels for Linux, macOS and
 Windows, and is the de-facto standard 2D library for Python, which matters for
 the packaging requirement in subject VII. Under the hood it wraps SDL2, so it is

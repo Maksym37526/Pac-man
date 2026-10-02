@@ -5,3 +5,4 @@ __pycache__/
 venv/
 highscore.json
 dist/
+butler

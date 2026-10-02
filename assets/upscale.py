@@ -71,7 +71,9 @@ GHOST_EXTRA: list[tuple[str, int, int, int, str, str]] = [
 ]
 
 
-def _resize_nearest(surf: pygame.Surface, target_w: int, target_h: int) -> pygame.Surface:
+def _resize_nearest(
+    surf: pygame.Surface, target_w: int, target_h: int
+) -> pygame.Surface:
     """Nearest-neighbor resize to an arbitrary tile size, no blending.
 
     Old code did exact replication (factor = tile // base) which only

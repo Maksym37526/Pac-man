@@ -40,6 +40,7 @@ clean:
 	@find . -not -path "./$(VENV)/*" -type d -name "__pycache__" -prune -exec rm -rf {} +
 	@find . -not -path "./$(VENV)/*" -type f -name "*.py[cod]" -delete
 	@rm -rf .mypy_cache .pytest_cache build dist *.egg-info
+	@rm -rf dist
 	@echo "Cleaned."
 
 ## lint: run flake8 and mypy with the flags required by the subject

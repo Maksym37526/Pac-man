@@ -90,7 +90,7 @@ are out of scope until every MUST row below is DONE.
 | REQ-035 | Config parsed as JSON | MUST | A | — | valid config loads | DONE |
 | REQ-036 | Lines starting with `#` treated as comments and ignored | MUST | A | — | config with `#` lines at various indents | DONE |
 | REQ-037 | Additional comment styles (C or C++) supported | FREE | A | — | decision recorded below | DONE |
-| REQ-038 | All config keys documented in the README | MUST | B | `README.md` | every key in the spec table appears in README | TODO |
+| REQ-038 | All config keys documented in the README | MUST | B | `README.md` | every key in the spec table appears in README | DONE |
 | REQ-039 | Robust defaults provided for every key | MUST | A | — | empty `{}` config launches the game | DONE |
 | REQ-040 | Key `highscore_filename` supported | MUST | A | `pacman/game.py` (`load_highscores`, `save_score`) | custom path honoured in `test_game_helpers_use_filename` | DONE |
 | REQ-041 | Key `level` — array of multiple levels | MUST | A | `pacman/game.py` (`build_level_specs`), `pacman/core/session.py` | `pytest tests/test_core_session.py` (transition lands on level 1) | DONE |
@@ -129,7 +129,7 @@ are out of scope until every MUST row below is DONE.
 | ID | Requirement | T | Owner | Where | Verify | St |
 |---|---|---|---|---|---|---|
 | REQ-061 | Highscores persist across runs | MUST | A | `pacman/data/highscore_store.py` | `test_roundtrip`: save → load returns the same table | DONE |
-| REQ-062 | Implementation documented in the README | MUST | B | `README.md` | Highscore section explains how and why | TODO |
+| REQ-062 | Implementation documented in the README | MUST | B | `README.md` | Highscore section explains how and why | DONE |
 | REQ-063 | Storage medium is our choice | FREE | A | `pacman/data/highscore_store.py` (JSON) | decision recorded below | DONE |
 | REQ-064 | Robust to file errors (missing file, invalid format) | MUST | A | `pacman/data/highscore_store.py` (`load`) | `test_highscore_store.py`: absent/empty/non-JSON/non-list/dir suite, partial recovery | DONE |
 | REQ-065 | Player names: max 10 characters, alphanumeric and spaces only | MUST | A | `pacman/data/highscore.py` (`normalise_name`) | `test_highscore.py`: cut/strip/default/symbols/Cyrillic suite | DONE |
@@ -191,7 +191,7 @@ are out of scope until every MUST row below is DONE.
 | REQ-096 | Cheat mode can be activated | MUST | A | `pacman/core/session.py` (`TOGGLE_CHEATS`) | `test_toggle_cheats_always_works` | DONE |
 | REQ-097 | Cheat mode genuinely lets a reviewer test **all** features easily | MUST | A+B | `pacman/core/session.py` (`apply_cheat`) | core DONE: `test_ten_skips_win_the_run` (Victory by hand); screens pending B | WIP |
 | REQ-098 | Which cheats to implement is our choice | FREE | A | `pacman/core/cheats.py` | cheat-to-requirement mapping recorded below | DONE |
-| REQ-099 | Cheat controls documented for the reviewer | MUST | B | `README.md` | key list present in README and in-game (proposal in contracts §4) | TODO |
+| REQ-099 | Cheat controls documented for the reviewer | MUST | B | `README.md` | key list present in README and in-game (proposal in contracts §4) | DONE |
 
 ## VI.6 — Scoring
 
@@ -244,7 +244,7 @@ are out of scope until every MUST row below is DONE.
 |---|---|---|---|---|---|---|
 | REQ-126 | Game installable and launchable from a public platform, free but unlisted/private | MUST | B | — | install on a clean machine from the platform | TODO |
 | REQ-127 | The packaged game is fully functional | MUST | A+B | — | full playthrough of the packaged build | TODO |
-| REQ-128 | Minimal in-package instructions: controls, options, configuration | MUST | B | — | present inside the distributed package | TODO |
+| REQ-128 | Minimal in-package instructions: controls, options, configuration | MUST | B | — | present inside the distributed package | DONE |
 | REQ-129 | Git repository contains the full source | MUST | A+B | — | fresh clone builds and runs | TODO |
 | REQ-130 | Packaging script / spec located at the repository root | MUST | A | — | file present at root | TODO |
 | REQ-131 | The package can be regenerated on demand during peer review | MUST | A | — | rebuild from a clean checkout | TODO |
@@ -255,30 +255,30 @@ are out of scope until every MUST row below is DONE.
 |---|---|---|---|---|---|---|
 | REQ-132 | A structured approach is used and evidenced | MUST | A+B | `project-management/` | directory populated and current | WIP |
 | REQ-133 | All PM artifacts in a dedicated subdirectory | MUST | B | `project-management/` | directory exists | DONE |
-| REQ-134 | Project timeline (Gantt, Kanban or equivalent) | MUST | B | — | artifact present | TODO |
+| REQ-134 | Project timeline (Gantt, Kanban or equivalent) | MUST | B | — | artifact present | DONE |
 | REQ-135 | Actual progress tracked and compared to the timeline | MUST | B | — | git history of this matrix shows progression | WIP |
 | REQ-136 | Project analysis and the choices made | MUST | A+B | — | decisions section below + package record | WIP |
-| REQ-137 | Risk analysis with possible mitigation | MUST | A+B | — | risk register present and updated | TODO |
-| REQ-138 | Team organization: who did what, how decisions and issues were handled | MUST | A+B | — | document present | TODO |
-| REQ-139 | Acceptance test plan: features tested, bugs found and fixed | MUST | B | — | document present | TODO |
-| REQ-140 | Summary of blocking points and conflicts during the project | MUST | A+B | — | document present | TODO |
+| REQ-137 | Risk analysis with possible mitigation | MUST | A+B | — | risk register present and updated | DONE |
+| REQ-138 | Team organization: who did what, how decisions and issues were handled | MUST | A+B | — | document present | DONE |
+| REQ-139 | Acceptance test plan: features tested, bugs found and fixed | MUST | B | — | document present | DONE |
+| REQ-140 | Summary of blocking points and conflicts during the project | MUST | A+B | — | document present | DONE |
 
 ## IX — README requirements
 
 | ID | Requirement | T | Owner | Where | Verify | St |
 |---|---|---|---|---|---|---|
 | REQ-141 | `README.md` at the root of the Git repository | MUST | B | `README.md` | file present | WIP |
-| REQ-142 | First line italicised: *This project has been created as part of the 42 curriculum by \<login1\>, \<login2\>* | MUST | B | `README.md` | exact wording and italics | TODO |
-| REQ-143 | Description section: goal and brief overview | MUST | B | `README.md` | section present | TODO |
-| REQ-144 | Instructions section: compilation, installation, execution | MUST | B | `README.md` | a stranger can run the game from it | TODO |
-| REQ-145 | Resources section: references, plus how AI was used and for which parts | MUST | A+B | `README.md` | AI usage described honestly and specifically | TODO |
-| REQ-146 | Configuration section: config file structure and default values | MUST | B | `README.md` | every key documented | TODO |
-| REQ-147 | Highscore section: how the system works and why implemented this way | MUST | B | `README.md` | rationale, not just mechanics | TODO |
-| REQ-148 | Maze Generation section: how the assigned package is used | MUST | B | `README.md` | condensed from `maze-package.md` | TODO |
-| REQ-149 | Implementation section: technical summary | MUST | B | `README.md` | section present | TODO |
-| REQ-150 | General Software Architecture section: modules, classes, relationships | MUST | B | `README.md` | includes an architecture diagram | TODO |
-| REQ-151 | Project Management section, with a link to the PM directory | MUST | B | `README.md` | link resolves | TODO |
-| REQ-152 | README written in English | MUST | B | `README.md` | proofread | TODO |
+| REQ-142 | First line italicised: *This project has been created as part of the 42 curriculum by \<login1\>, \<login2\>* | MUST | B | `README.md` | exact wording and italics | DONE |
+| REQ-143 | Description section: goal and brief overview | MUST | B | `README.md` | section present | DONE |
+| REQ-144 | Instructions section: compilation, installation, execution | MUST | B | `README.md` | a stranger can run the game from it | DONE |
+| REQ-145 | Resources section: references, plus how AI was used and for which parts | MUST | A+B | `README.md` | AI usage described honestly and specifically | DONE |
+| REQ-146 | Configuration section: config file structure and default values | MUST | B | `README.md` | every key documented | DONE |
+| REQ-147 | Highscore section: how the system works and why implemented this way | MUST | B | `README.md` | rationale, not just mechanics | DONE |
+| REQ-148 | Maze Generation section: how the assigned package is used | MUST | B | `README.md` | condensed from `maze-package.md` | DONE |
+| REQ-149 | Implementation section: technical summary | MUST | B | `README.md` | section present | DONE |
+| REQ-150 | General Software Architecture section: modules, classes, relationships | MUST | B | `README.md` | includes an architecture diagram | DONE |
+| REQ-151 | Project Management section, with a link to the PM directory | MUST | B | `README.md` | link resolves | DONE |
+| REQ-152 | README written in English | MUST | B | `README.md` | proofread | DONE |
 
 ## X — Submission and peer review
 

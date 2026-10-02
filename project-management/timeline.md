@@ -15,7 +15,7 @@ the module contracts milestone order (maze → core → UI → packaging).
 | Sprites, Session cheat integration (Ph.10) | 29–30.09 | 29–30.09 | DONE on time |
 | UI polish: themes, party mode, FX, centered screens | 30.09 | 30.09 | DONE on time |
 | Lint sign-off (flake8 + mypy clean) | 01.10 | 01.10 | DONE on time |
-| README + packaging + itch.io build | 01–02.10 | — | TODO (current) |
+| README + packaging + itch.io build | 01–02.10 | 02.10 | DONE on time |
 
 Slippage: none on code milestones. Docs/packaging were deliberately left
 last so they describe the final state, not a moving target.
